@@ -12,7 +12,7 @@ agent-shared/
 ├── global/
 │   └── AGENTS.md            # canonical cross-repo baseline (see below)
 └── skills/
-    └── example-skill/
+    └── pr-review-loop/
         └── SKILL.md         # portable Agent Skill (core spec only)
 ```
 
@@ -25,10 +25,12 @@ via symlinks on this machine:
 | ------------------------------------ | ----------------------------------- |
 | `~/.codex/AGENTS.md`                 | `global/AGENTS.md`                  |
 | `~/.claude/CLAUDE.md`                | `global/AGENTS.md`                  |
-| `~/.claude/skills/example-skill`     | `skills/example-skill`              |
-| `~/.agents/skills/example-skill`     | `skills/example-skill`              |
+| `~/.claude/skills/pr-review-loop`    | `skills/pr-review-loop`             |
+| `~/.agents/skills/pr-review-loop`    | `skills/pr-review-loop`             |
 
 Edit the files in this repo; the symlinks pick up changes automatically.
+Each new skill under `skills/` gets the same pair of symlinks
+(`~/.claude/skills/<name>` and `~/.agents/skills/<name>`).
 
 ## Conventions
 
