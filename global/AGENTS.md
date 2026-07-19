@@ -125,6 +125,10 @@ When a repo has CI and a commit is pushed (or the user asks to verify CI):
 
 ## 5. Pull requests: self-review, then triage
 
+> This procedure is packaged as the **`pr-review-loop`** skill (in
+> `agent-shared/skills/`). Invoke that skill to run it; the steps below are its
+> canonical description.
+
 **Self-review every PR you open.** Immediately after opening (or pushing to) a
 PR, review the full diff against the repo's review rubric
 (`.woodpecker/pr-review-prompt.md` where present) — correctness, security/OWASP,
