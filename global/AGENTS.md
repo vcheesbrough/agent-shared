@@ -51,6 +51,10 @@ numbered iterations (e.g. the Rust-app repos). A repo may **override** it — fo
 example, `mini-config` names branches after the card (`feat/<slug>`) with no
 iteration heading or semver coupling.
 
+> The kickoff sequence is packaged as the **`start-iteration`** skill (in
+> `agent-shared/skills/`). Invoke that skill to start a card; the rules below
+> are its canonical description.
+
 - **One iteration = one bored card = one feature branch = one semver minor.**
   Do not split an iteration across cards or branches, and do not stack.
 - **Assign `N` only when work starts.** The moment a card moves to In Progress,
@@ -100,6 +104,10 @@ iteration heading or semver coupling.
   the task at hand.
 
 ## 4. CI after every push
+
+> This procedure is packaged as the **`ci-watch`** skill (in
+> `agent-shared/skills/`). Invoke that skill to run it; the steps below are its
+> canonical description.
 
 When a repo has CI and a commit is pushed (or the user asks to verify CI):
 

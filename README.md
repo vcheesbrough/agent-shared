@@ -11,9 +11,10 @@ agent-shared/
 ├── README.md
 ├── global/
 │   └── AGENTS.md            # canonical cross-repo baseline (see below)
-└── skills/
-    └── pr-review-loop/
-        └── SKILL.md         # portable Agent Skill (core spec only)
+└── skills/                  # portable Agent Skills (core spec only)
+    ├── pr-review-loop/       # self-review a PR, then resolve threads
+    ├── ci-watch/            # monitor CI to completion, reproduce failures
+    └── start-iteration/     # start a bored card as a numbered iteration
 ```
 
 ## How it's wired up
@@ -25,12 +26,13 @@ via symlinks on this machine:
 | ------------------------------------ | ----------------------------------- |
 | `~/.codex/AGENTS.md`                 | `global/AGENTS.md`                  |
 | `~/.claude/CLAUDE.md`                | `global/AGENTS.md`                  |
-| `~/.claude/skills/pr-review-loop`    | `skills/pr-review-loop`             |
-| `~/.agents/skills/pr-review-loop`    | `skills/pr-review-loop`             |
+| `~/.claude/skills/<name>`            | `skills/<name>`                     |
+| `~/.agents/skills/<name>`            | `skills/<name>`                     |
 
 Edit the files in this repo; the symlinks pick up changes automatically.
-Each new skill under `skills/` gets the same pair of symlinks
-(`~/.claude/skills/<name>` and `~/.agents/skills/<name>`).
+Every skill under `skills/` gets the same pair of symlinks
+(`~/.claude/skills/<name>` and `~/.agents/skills/<name>`) — currently
+`pr-review-loop`, `ci-watch`, and `start-iteration`.
 
 ## Conventions
 
