@@ -106,14 +106,22 @@ When a repo has CI and a commit is pushed (or the user asks to verify CI):
 - **Monitor every pipeline that commit triggers through to completion.** Do not
   stop at the first status check and **never report a pending pipeline as the
   final result.**
-- Poll the GitHub commit status for the pushed SHA
+- **Default CI is Woodpecker.** Most repos run **Woodpecker CI** — monitor the
+  Woodpecker pipeline for that commit through to completion, using the
+  **Woodpecker MCP** when available (`get_pipeline_status`, `list_pipelines`,
+  `get_logs`). Woodpecker also mirrors its result to the GitHub commit status,
+  so `gh api repos/<owner>/<repo>/commits/$SHA/status --jq '.state'` is a valid
+  read of the same outcome when the MCP is unavailable.
+- **Only repos not on Woodpecker** rely on GitHub-native CI — for those, poll
+  the GitHub commit status for the pushed SHA
   (`gh api repos/<owner>/<repo>/commits/$SHA/status --jq '.state'` → expect
   `success`).
 - **On failure**, reproduce the failing check locally using the repo's
   documented commands, make a narrow fix, commit (when the user has asked),
-  push, and **re-poll until green.**
-- If `gh` is unavailable or the status stays `pending`, say so once and ask
-  whether to wait/retry or use the CI UI. **Never invent a CI outcome.**
+  push, and **re-monitor until green.**
+- If neither the Woodpecker MCP nor `gh` is available, or the status stays
+  `pending`, say so once and ask whether to wait/retry or use the Woodpecker UI.
+  **Never invent a CI outcome.**
 
 ## 5. Pull requests: self-review, then triage
 
