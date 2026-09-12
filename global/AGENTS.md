@@ -27,7 +27,7 @@ When a repo uses **bored** Kanban cards as its task queue:
   cards, no stacking work.
 - **Use bored MCP for all board/column/card reads and writes** (`list_boards`,
   `list_columns`, `list_cards`, `get_card_by_number`, `create_card`,
-  `update_card`, `move_card`, …). **Do not** hit the bored HTTP API with `curl`
+  `update_card`, `move_card`,  `link_cards`, `unlink_cards`, …). **Do not** hit the bored HTTP API with `curl`
   or ad-hoc clients unless MCP is broken — then say so once, fall back
   minimally, and still obey these rules.
 - **Default endpoint** `https://bored.desync.link`, scope `bored:prod:access`,
@@ -40,6 +40,10 @@ When a repo uses **bored** Kanban cards as its task queue:
 - **Cards have no separate title field** — the board shows the first markdown
   `#` heading in the body. The `Iteration N` heading convention (§2) applies to
   that first heading.
+- **Cards have after and before links** these define ordering / dependencies, 
+  they must be used to link cards together, where such dependencies exist.
+- **Cards have zero or more tags** these are used to categorize cards and filter
+  the board view, add or remove them from cards as needed.
 
 > Repo-specific: the board slug/URL lives in each repo's own `AGENTS.md`. The
 > default iteration/branch/semver mapping is §2 below.
