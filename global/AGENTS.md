@@ -43,7 +43,8 @@ When a repo uses **bored** Kanban cards as its task queue:
 - **Cards have after and before links** these define ordering / dependencies, 
   they must be used to link cards together, where such dependencies exist.
 - **Cards have zero or more tags** these are used to categorize cards and filter
-  the board view, add or remove them from cards as needed.
+  the board view, add or remove them from cards as needed, agents should not invent
+  new tags on a board, only use those already present.
 
 > Repo-specific: the board slug/URL lives in each repo's own `AGENTS.md`. The
 > default iteration/branch/semver mapping is §2 below.
