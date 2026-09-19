@@ -9,6 +9,7 @@
 #   ~/.claude/CLAUDE.md       -> global/AGENTS.md   (Claude Code baseline)
 #   ~/.claude/skills/<name>   -> skills/<name>      (personal skills, all repos)
 #   ~/.agents/skills/<name>   -> skills/<name>      (Codex skills, all repos)
+#   ~/.claude/agents/<name>.md -> agents/<name>.md  (subagents, Claude Code only)
 #
 # Usage:
 #   ./install.sh            create/refresh all links
@@ -70,14 +71,22 @@ for dir in "$REPO"/skills/*/; do
   link "$REPO/skills/$name" "$HOME/.agents/skills/$name"
 done
 
-# --- prune dangling skill links that point into this repo ---
-for base in "$HOME/.claude/skills" "$HOME/.agents/skills"; do
+# --- agents (one link per agents/<name>.md; Claude Code only) ---
+run "mkdir -p '$HOME/.claude/agents'"
+for f in "$REPO"/agents/*.md; do
+  [[ -f "$f" ]] || continue
+  name="$(basename "$f")"
+  link "$REPO/agents/$name" "$HOME/.claude/agents/$name"
+done
+
+# --- prune dangling skill/agent links that point into this repo ---
+for base in "$HOME/.claude/skills" "$HOME/.agents/skills" "$HOME/.claude/agents"; do
   [[ -d "$base" ]] || continue
   for l in "$base"/*; do
     [[ -L "$l" ]] || continue
     tgt="$(readlink "$l")"
     case "$tgt" in
-      "$REPO/skills/"*)
+      "$REPO/skills/"*|"$REPO/agents/"*)
         if [[ ! -e "$tgt" ]]; then
           say "  prune   $l (target gone: $tgt)"
           run "rm '$l'"

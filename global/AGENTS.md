@@ -142,11 +142,17 @@ When a repo has CI and a commit is pushed (or the user asks to verify CI):
 > `agent-shared/skills/`). Invoke that skill to run it; the steps below are its
 > canonical description.
 
-**Self-review every PR you open.** Immediately after opening (or pushing to) a
-PR, review the full diff against the repo's review rubric
-(`.woodpecker/pr-review-prompt.md` where present) — correctness, security/OWASP,
-tests, versioning, scope — and post the result as a GitHub PR review with `gh`
-(inline comments on real RIGHT-side diff lines where possible). Treat remote
+**Self-review every PR you open — from a clean context.** Immediately after
+opening (or pushing to) a PR, hand the review to the **`pr-self-review`
+subagent** (in `agent-shared/agents/`) rather than reviewing your own diff. It
+starts without the conversation that produced the branch, which is the whole
+point: the author already believes the code is correct. Pass it **coordinates
+only** — owner, repo, PR number, trunk — and never the design rationale. It
+reviews for **correctness, security/OWASP, test coverage of the changed
+behaviour, versioning, and scope**, plus whatever the repo's own `AGENTS.md`
+adds, and posts the findings itself with `gh` — one inline comment per finding
+on a real RIGHT-side diff line, plus a summary comment, and **no review
+verdict**. Unresolved threads are what signal that work remains. Treat remote
 review agents as **supplementary and unreliable**, not the primary path.
 
 **Then run the comment loop** for every unresolved thread (yours, humans', and

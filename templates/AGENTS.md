@@ -27,8 +27,9 @@ Shared skills apply here once the machine is wired up (`start-iteration`,
 `ci-watch`, `pr-review-loop`). Their per-repo parameters:
 
 - `OWNER=<owner>`, `REPO=<repo>`
-- Review rubric: `<.woodpecker/pr-review-prompt.md, or delete if none>`
 - CI reproduce commands: `<repo-specific docker/compose commands, or delete>`
+- Extra review criteria beyond the baseline five (correctness, security/OWASP,
+  tests, versioning, scope): `<repo-specific checks, or delete if none>`
 
 ---
 

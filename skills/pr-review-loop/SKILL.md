@@ -30,24 +30,40 @@ Do this immediately after `gh pr create` or a push to the PR branch. Do **not**
 wait for remote review agents (Woodpecker `pr-review`, Cursor Automation,
 Bugbot); treat them as supplementary and unreliable.
 
-1. **Load the rubric.** Use the repo's `.woodpecker/pr-review-prompt.md` if it
-   exists; otherwise review for correctness, security / OWASP, tests, versioning,
-   and scope. Read the touched files for context.
-2. **Review the full diff** file-by-file: `gh pr diff $PR` (or
-   `git diff <trunk>...HEAD`).
-3. **Post one GitHub review** with `gh`:
-   - Verdict: `--approve` only when truly clean, `--request-changes` for
-     blockers, `--comment` for minor/informational.
-     ```bash
-     gh pr review $PR --request-changes --body "<summary: verdict + checks run>"
-     ```
-   - Inline comments on specific lines (blockers and majors at minimum) must
-     reference real lines on the **RIGHT** side of the diff; include a
-     ` ```suggestion ` block where a concrete replacement is possible. Use
-     `gh api .../pulls/$PR/comments` or GraphQL
-     `addPullRequestReviewComment` when `gh pr review` can't place them.
-4. **Surface the verdict to the user**, then continue to Part B — treat your own
-   inline comments like any other reviewer's.
+**Delegate the review to the `pr-self-review` subagent — do not review the diff
+yourself.** You wrote the code; you already believe it is correct, and that
+belief is what a self-review has to get past. The subagent starts with a clean
+context: it sees the repo and the diff, but not the conversation that produced
+them. This delegation is required by baseline §5, so the usual "don't use the
+Agent tool unless asked" rule does not apply here.
+
+1. **Spawn the subagent** with the Agent tool, `subagent_type:
+   "pr-self-review"`, and run it in the foreground — Part B depends on its
+   result and there is nothing useful to do meanwhile.
+
+2. **Pass coordinates only:**
+
+   > Review PR #$PR on $OWNER/$REPO. Trunk is `<trunk>`.
+
+   **Nothing else.** No summary of what the branch does, no rationale for the
+   design, no "I already checked X". Every such sentence hands the reviewer
+   your bias back and spends the clean context you just paid for.
+
+3. **Let it post its own comments.** The subagent files one inline comment per
+   finding plus a summary comment, directly. It files **no review verdict** —
+   unresolved threads are the signal that work remains. Do not offer to post
+   findings on its behalf and do not filter, soften, or pre-argue them — that
+   would put the author back in the loop.
+
+4. **Relay what it found to the user** (finding count, severity, PR URL), then
+   continue to Part B, where its comments are triaged exactly like any other
+   reviewer's.
+
+If the subagent is unavailable (no Agent tool in this environment), say so
+explicitly, then review the diff yourself — correctness, security / OWASP,
+tests, versioning, scope, plus whatever the repo's `AGENTS.md` adds — post the
+findings as inline comments the same way, and note in the summary comment that
+the review was authored without a clean context.
 
 ## Part B — triage and resolve threads
 
@@ -108,9 +124,12 @@ Bugbot); treat them as supplementary and unreliable.
 - **All resolution explanations go on the PR**, not back-channel chat.
 - Self-review is **required** when you open the PR; remote agent output is
   optional/supplementary.
+- **The author never reviews their own diff** — Part A goes to the
+  `pr-self-review` subagent, with coordinates only and no design rationale.
 
 ## Repo-specific bits
 
-`OWNER`/`REPO`, the rubric path, and the sanity-check commands come from the
-repo's own `AGENTS.md`. Merge/branch-cleanup conventions (e.g. squash + delete
+`OWNER`/`REPO` and the sanity-check commands come from the repo's own
+`AGENTS.md`, which is also where any review criteria beyond the baseline five
+live — the subagent reads it directly. Merge/branch-cleanup conventions (e.g. squash + delete
 branch) also live there — follow them at ship time.
