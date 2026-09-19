@@ -17,7 +17,8 @@ agent-shared/
 │   ├── ci-watch/            # monitor CI to completion, reproduce failures
 │   └── start-iteration/     # start a bored card as a numbered iteration
 ├── agents/                  # subagent definitions (Claude Code only)
-│   └── pr-self-review.md    # reviews a PR diff in a clean context
+│   ├── pr-self-review.md    # reviews a PR diff in a clean context
+│   └── ci-diagnose.md       # reads failed CI logs, returns a short diagnosis
 ├── hooks/                   # hook scripts referenced from settings.json
 │   └── gh-pr-create-selfreview.py
 └── templates/               # starting points for a new repo
@@ -49,14 +50,29 @@ Every skill under `skills/` gets the same pair of symlinks
 Code-only** (Codex has no equivalent), so they get a single link into
 `~/.claude/agents/`.
 
-A subagent is the tool for work that must happen in a **clean context** —
-without the conversation that led up to it. `pr-self-review` is the current
-case: baseline §5 requires every PR to be self-reviewed, but the agent that
-wrote the branch already believes it is correct. The subagent sees the repo and
-the diff and nothing else, so it reviews the code rather than re-endorsing the
-author's reasoning. The `pr-review-loop` skill spawns it in Part A and passes
-coordinates only — owner, repo, PR number, trunk — deliberately withholding the
-design rationale.
+Subagents earn their keep in two distinct ways here.
+
+**A clean context** — work that must happen *without* the conversation that led
+up to it. `pr-self-review` is the case: baseline §5 requires every PR to be
+self-reviewed, but the agent that wrote the branch already believes it is
+correct. The subagent sees the repo and the diff and nothing else, so it reviews
+the code rather than re-endorsing the author's reasoning. The `pr-review-loop`
+skill spawns it in Part A and passes coordinates only — owner, repo, PR number,
+trunk — deliberately withholding the design rationale.
+
+**A throwaway context** — work that reads a lot, returns a little, and never
+needs its intermediates again. `ci-diagnose` is the case: a failing Woodpecker
+step can run to tens of thousands of log lines, and once those land in the main
+context they sit there for the rest of the iteration, crowding out the actual
+work. The subagent reads them, returns ~20 lines of diagnosis, and the logs die
+with it. It runs on Sonnet — log triage does not need the main thread's model,
+and per-agent `model:` frontmatter is the cheapest lever in the whole setup.
+
+Not everything is worth delegating. `start-iteration` is a handful of MCP calls
+returning small payloads; spawning a subagent costs more than it saves. Nor can
+the §5 Part B triage loop be delegated at all — it needs a user decision per
+comment. The test is: does it read a lot, return a little, and never need its
+intermediates again?
 
 ## Set up on a new machine
 

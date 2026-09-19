@@ -129,9 +129,14 @@ When a repo has CI and a commit is pushed (or the user asks to verify CI):
   the GitHub commit status for the pushed SHA
   (`gh api repos/<owner>/<repo>/commits/$SHA/status --jq '.state'` → expect
   `success`).
-- **On failure**, reproduce the failing check locally using the repo's
-  documented commands, make a narrow fix, commit (when the user has asked),
-  push, and **re-monitor until green.**
+- **On failure**, hand the logs to the **`ci-diagnose` subagent** (in
+  `agent-shared/agents/`) rather than reading them yourself — a failing step can
+  run to tens of thousands of lines, and it stays in your context for the rest
+  of the iteration once read. It returns a short diagnosis: genuine failure vs
+  infrastructure flake, failing step, root cause, and the local reproduce
+  command. Relay that to the user, then reproduce the check locally, make a
+  narrow fix, commit (when the user has asked), push, and **re-monitor until
+  green.**
 - If neither the Woodpecker MCP nor `gh` is available, or the status stays
   `pending`, say so once and ask whether to wait/retry or use the Woodpecker UI.
   **Never invent a CI outcome.**
@@ -216,3 +221,9 @@ bots' — treated equally):
 - Prefer clear names over comments; comment the *why*, not the *what*.
 - Keep changes scoped to the task; handle errors explicitly.
 - Run the project's configured formatter/linter before committing.
+- **Send broad "where is X handled?" searches to the `Explore` subagent**, not
+  to your own context. Exploration is the largest token sink in an iteration:
+  it reads many files to answer one question, and every file it opens stays in
+  context afterwards, pushing you toward compaction mid-card. `Explore` returns
+  the conclusion and throws the file dumps away. Read files directly when you
+  already know which one you need — that is a lookup, not a search.

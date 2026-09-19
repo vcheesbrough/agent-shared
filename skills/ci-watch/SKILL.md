@@ -37,17 +37,35 @@ to completion:
 Keep polling while the state is `pending`. Report which checks ran and the
 combined result (**success / failure / still pending**).
 
-## 2. On failure — reproduce locally, fix, re-monitor
+## 2. On failure — diagnose, reproduce locally, fix, re-monitor
 
-1. Read the failing step's logs (Woodpecker MCP `get_logs`, or the Woodpecker
-   UI).
-2. **Reproduce the failing check locally** using the repo's documented commands
-   (from its `AGENTS.md` / `docs/DEV.md` — typically a `docker build` that runs
-   fmt/lint/tests, then an e2e compose run).
-3. Make a **narrow** fix. Commit only when the user has asked, push to the same
+1. **Delegate the log reading to the `ci-diagnose` subagent** — do not read the
+   logs yourself. A failing step can run to tens of thousands of lines, and once
+   that lands in your context it stays there for the rest of the iteration,
+   crowding out the work. Spawn it with the Agent tool, `subagent_type:
+   "ci-diagnose"`, in the foreground, passing `OWNER`, `REPO`, and `SHA`. It
+   returns a short report: verdict (genuine failure vs flake), failing step,
+   root cause, a few lines of evidence, and the local reproduce command.
+
+   This delegation is required by baseline §4, so the usual "don't use the Agent
+   tool unless asked" rule does not apply here. If the Agent tool is unavailable,
+   say so, then read the logs yourself (Woodpecker MCP `get_logs`, or the
+   Woodpecker UI).
+
+2. **Relay the diagnosis to the user** before changing anything. An
+   infrastructure flake is re-run, not fixed — and only the report distinguishes
+   the two.
+
+3. **Reproduce the failing check locally** using the command the diagnosis
+   named (from the repo's `AGENTS.md` / `docs/DEV.md` — typically a
+   `docker build` that runs fmt/lint/tests, then an e2e compose run).
+
+4. Make a **narrow** fix. Commit only when the user has asked, push to the same
    branch.
-4. **Re-monitor** the new commit from step 1 until the combined state is
-   `success`.
+
+5. **Re-monitor** the new commit from step 1 until the combined state is
+   `success`. Each new failure gets its own `ci-diagnose` run — never carry the
+   previous diagnosis forward as an assumption.
 
 All push steps (including any `e2e` stage) must be green before an iteration is
 declared done.
