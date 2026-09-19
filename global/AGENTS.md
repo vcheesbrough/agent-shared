@@ -98,8 +98,24 @@ iteration heading or semver coupling.
   "from trunk" throughout this file means that branch.
 - **Never stack branches** — always branch from trunk, never from another
   feature branch.
-- **Do not commit or push unless the user explicitly asks.** (A completed PR
-  review batch is commit consent for *that batch only* — see §5.)
+- **Once an iteration is under way, commit, push and open the PR unattended.**
+  The moment a card moves to In Progress (§2 / the `start-iteration` skill) you
+  have standing consent to commit, push and `gh pr create` for that iteration —
+  including the fix commits that turn CI green (§4) — without asking again. Work
+  the card through to a PR that is green and ready to merge, then stop and say
+  so. Do not pause for permission at each commit; do not ask whether to open the
+  PR.
+- **Merging is always the user's decision.** Never merge, squash-merge, rebase-
+  merge or enable auto-merge, and never close a PR as a substitute for merging
+  it. "Iteration done" means *"PR #N is green and ready to merge"* — the user
+  merges, and only then does the card move to Done (§1).
+- **Outside an active iteration, ask first.** Before the card is In Progress,
+  and in any repo or task not running as an iteration, do not commit or push
+  unless the user explicitly asks.
+- **Autonomy stops at the review loop.** It covers getting the PR open and
+  green, not the review threads on it: the user still decides every comment
+  one at a time, and those decisions are the commit consent for that batch
+  (§5).
 - **Never** force-push to `main`/`master`; avoid destructive git
   (`reset --hard`, `push --force`, history rewrites) unless the user explicitly
   requests it.
@@ -135,8 +151,8 @@ When a repo has CI and a commit is pushed (or the user asks to verify CI):
   of the iteration once read. It returns a short diagnosis: genuine failure vs
   infrastructure flake, failing step, root cause, and the local reproduce
   command. Relay that to the user, then reproduce the check locally, make a
-  narrow fix, commit (when the user has asked), push, and **re-monitor until
-  green.**
+  narrow fix, commit, push, and **re-monitor until green.** During an active
+  iteration these fix commits need no further approval (§3).
 - If neither the Woodpecker MCP nor `gh` is available, or the status stays
   `pending`, say so once and ask whether to wait/retry or use the Woodpecker UI.
   **Never invent a CI outcome.**
@@ -147,9 +163,10 @@ When a repo has CI and a commit is pushed (or the user asks to verify CI):
 > `agent-shared/skills/`). Invoke that skill to run it; the steps below are its
 > canonical description.
 
-**Self-review every PR you open — from a clean context.** Immediately after
-opening (or pushing to) a PR, hand the review to the **`pr-self-review`
-subagent** (in `agent-shared/agents/`) rather than reviewing your own diff. It
+**Open the PR yourself, unattended** (§3), then **self-review it from a clean
+context.** Immediately after opening (or pushing to) a PR, hand the review to
+the **`pr-self-review` subagent** (in `agent-shared/agents/`) rather than
+reviewing your own diff. It
 starts without the conversation that produced the branch, which is the whole
 point: the author already believes the code is correct. Pass it **coordinates
 only** — owner, repo, PR number, trunk — and never the design rationale. It
@@ -176,6 +193,10 @@ bots' — treated equally):
    open).
 6. **One commit per batch** — never one-per-comment, never a force-push. The
    resolution audit trail stays on the PR, not in back-channel chat.
+
+**Then hand the PR back.** When every thread is resolved and CI is green, report
+*"PR #N is green and ready to merge"* and stop. **You never merge** (§3) — the
+merge, and the card's move to Done that follows it, are the user's.
 
 ## 6. Automated test coverage
 

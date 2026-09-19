@@ -45,6 +45,26 @@ branches, and do not stack branches.
 
 Now implement against the card's acceptance criteria, scoped to this card.
 
+## After this skill: you are unattended
+
+Moving the card to In Progress (step 2) is the consent boundary. From here to a
+finished PR you **do not stop to ask**: implement, commit, push, `gh pr create`,
+watch CI (`ci-watch`), fix and re-push until green — all without further
+approval, per baseline §3.
+
+Two things still belong to the user, and only two:
+
+- **Every review comment.** Once the PR is open, `pr-review-loop` Part B
+  presents each unresolved thread one at a time and the user decides it. Do not
+  self-triage.
+- **The merge.** Never merge, squash-merge or enable auto-merge. Finish by
+  reporting *"PR #N is green and ready to merge"*; the user merges, and only
+  then does the card move to Done.
+
+If the card's scope turns out to be wrong mid-iteration, that is still worth
+raising — unattended means "don't ask permission for the mechanics", not "don't
+speak up".
+
 ## Repo overrides
 
 Some repos override this convention — e.g. an **operations repo** may name

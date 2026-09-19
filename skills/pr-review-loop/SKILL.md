@@ -22,6 +22,10 @@ PR=<pr-number>              # gh pr view --json number -q .number
 Treat bot and human comments **equally**. The user decides every comment. Never
 force-push. The resolution audit trail lives on the PR, not in chat.
 
+**Opening the PR is unattended; merging it never is.** During an iteration you
+`gh pr create` without asking (baseline §3), but the two gates in this skill
+stay: the user decides every review comment, and the user performs the merge.
+
 ---
 
 ## Part A — self-review the PR you opened
@@ -112,6 +116,10 @@ the review was authored without a clean context.
 6. **Re-enter Part B** when the user asks for the next round, or when polling
    reveals new unresolved threads (remote agents re-run on each push).
 
+7. **Hand the PR back.** When no unresolved threads remain and CI is green,
+   report *"PR #$PR is green and ready to merge"* and stop. **Do not merge** —
+   see the hard rules.
+
 ---
 
 ## Hard rules
@@ -126,6 +134,9 @@ the review was authored without a clean context.
   optional/supplementary.
 - **The author never reviews their own diff** — Part A goes to the
   `pr-self-review` subagent, with coordinates only and no design rationale.
+- **Never merge the PR.** No `gh pr merge`, no squash/rebase merge, no
+  `--auto`, and never close a PR instead of merging it. The merge is the user's
+  approval gate and the last human decision in the iteration.
 
 ## Repo-specific bits
 

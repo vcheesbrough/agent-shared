@@ -60,8 +60,9 @@ combined result (**success / failure / still pending**).
    named (from the repo's `AGENTS.md` / `docs/DEV.md` — typically a
    `docker build` that runs fmt/lint/tests, then an e2e compose run).
 
-4. Make a **narrow** fix. Commit only when the user has asked, push to the same
-   branch.
+4. Make a **narrow** fix, commit and push to the same branch. During an active
+   iteration this needs no approval — turning CI green is part of the unattended
+   run (baseline §3). Outside an iteration, commit only when the user has asked.
 
 5. **Re-monitor** the new commit from step 1 until the combined state is
    `success`. Each new failure gets its own `ci-diagnose` run — never carry the
