@@ -1,20 +1,22 @@
 # Protocol version lifecycle
 
-Companion to `../SKILL.md`. Both procedures are ordered on purpose: the order
-is what makes a half-finished change fail loudly instead of shipping.
+Companion to `../SKILL.md`.
 
 ## Introducing version `vN`
 
-These steps are recommended but not required.
+These steps are recommended, not required. The order is the useful part: it is
+what makes a half-finished change fail loudly instead of shipping.
 
 1. **Copy the newest wire definition to a new `vN` namespace** (its own
-   package / path prefix, hence its own routes). Make the breaking change
-   there, and only there. Every existing version's definition stays untouched.
+   package / path prefix, hence its own routes). Make the change there, and
+   only there. Every existing version's definition stays untouched.
 2. **Generate/expose the `vN` wire types** alongside the existing versions'.
-3. **Write the `vN` ↔ core shims** by copying the previous version's shims and
-   pointing them at the `vN` types. Translation only, validate nothing; if the
-   breaking change needs new behaviour, it goes in the shared implementation
-   or the core, expressed version-free.
+3. **Write the `vN` shims.** Reuse the shared adapter code for everything `vN`
+   leaves unchanged, and write new adapter code only for what it changes —
+   never by calling another version's shim. The shim adapts `vN`'s wire
+   contract to the shared implementation and does `vN`'s basic validation; new
+   business behaviour goes in the shared implementation or the core, expressed
+   version-free.
 4. **Register the `vN` routes on the server, leaving every existing
    registration in place**, each `vN` shim constructed over the same instance
    of the shared implementation the older shims use.
@@ -26,19 +28,23 @@ These steps are recommended but not required.
      transport that cannot dial it — that failure is the point;
    - fix it by writing a `vN` dialer per transport. Do **not** silence it by
      returning an older version's dialer.
-6. **Add `vN` to the server's served-versions set — last.** This is what
-   advertises it, so the routes must already exist. The unauthenticated
-   handshake allowlist and the metric label derive from this set and need no
-   separate edit; if they do need one, fix that first.
-7. If any clients can be deployed before the server then they must support
-   multiple versions, typically they will use the same 'shim' approach to 
-   do this, it is expected this is not common.
+6. If any client can be deployed before the server, it must support multiple
+   versions — typically with the same shim approach. This is not expected to
+   be common.
 
 ## Retiring version `vK`
 
-It is preferred that the server will not retire a version that a client still 
-uses however it is free to do so if it wishes.
+The server should not retire a version that a client still uses, but it is
+free to do so.
 
-The server 'should' add a deprecation date to the old version in the get versions
-request, after that date it should stop supporting that version, however none of 
-this is required and the server may drop a version abrutly if it needs to do so.
+The server should add a deprecation date to the version in its handshake
+response, and stop serving the version after that date. None of this is
+required: the server may drop a version abruptly if it needs to — a version in
+which a security flaw is discovered is likely to be dropped immediately.
+
+Retiring is removing the version's routes, its shim, and its entry in the
+handshake's list. The routes then fall to the catch-all, which answers with
+the version-not-served error; a client still connected on `vK` re-handshakes
+once and carries on with another version, or aborts if it has none in common
+(`../SKILL.md` §1.6). Adapter code shared with other versions stays; only what
+`vK` alone used is deleted.
