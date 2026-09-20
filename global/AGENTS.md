@@ -184,6 +184,10 @@ bots' — treated equally):
    `isResolved == false`).
 2. **Present one comment at a time** — file/line, author, full body, your
    analysis, and concrete fix option(s) including an explicit ignore/push-back.
+   **Ask for the decision with the `AskUserQuestion` tool, one call per
+   thread**, so every thread is decided through the same interface — including
+   the binary ones, which are asked as a two-option question rather than a
+   typed-out yes/no.
 3. **The user decides every comment.** Never change code for a review comment
    without an explicit choice.
 4. Apply approved changes locally and sanity-check, but **accumulate the batch**

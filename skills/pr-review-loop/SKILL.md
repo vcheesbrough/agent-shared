@@ -88,10 +88,37 @@ the review was authored without a clean context.
      }' -F owner=$OWNER -F repo=$REPO -F num=$PR
    ```
 
-2. **Present one comment at a time.** For each unresolved thread show: file +
-   line, author, full comment body, your **analysis** (what they meant, whether
-   it matters), and concrete **fix option(s)** — always including an explicit
-   "ignore / push back" choice. Prompt A/B/C or yes/no. **The user decides.**
+2. **Present one comment at a time.** For each unresolved thread, first write
+   out in the message: file + line, author, the **full comment body**, and your
+   **analysis** (what they meant, whether it matters). Then ask for the
+   decision.
+
+   **Always ask with the `AskUserQuestion` tool — never as plain prose.** The
+   decision UI is not a nicety that depends on how many options there happen to
+   be; it is the uniform way this loop collects decisions, so every thread gets
+   the same interface and the choice is recorded the same way. Even a
+   straight-up "fix it or not" is asked as a two-option question, not as a
+   typed-out yes/no.
+
+   One call per thread — **never** bundle several threads into one call's
+   questions array, even when they look related. Shape it as:
+
+   - `header`: a ≤12-char tag, e.g. the file stem or `nullcheck`.
+   - `question`: the decision to make on this thread, in one sentence.
+   - `options`: 2–4 concrete resolutions, each `label` a short imperative
+     ("Add the bounds check") and each `description` saying what changes and
+     what it costs. Put your recommendation first, suffixed
+     `(Recommended)`.
+   - **One option is always an explicit ignore / push back** — "Won't fix,
+     reply on the thread" — with the description saying what goes in the reply.
+   - `multiSelect: false` unless the fixes genuinely compose.
+
+   The tool adds its own "Other" escape, so do not spend an option on one. If
+   the user picks Other or answers with free text, treat that as the decision
+   and carry on — do not re-ask the same thread through the tool.
+
+   **The user decides.** A thread whose answer is "let's discuss" gets no code
+   change and stays unresolved.
 
 3. **Apply the chosen resolution locally.** Make the edits, run a quick sanity
    check (e.g. `cargo check`, `trunk build`), but **do not commit yet** —
@@ -127,6 +154,9 @@ the review was authored without a clean context.
 - **User decides every comment** — never change code for a review comment
   without an explicit choice.
 - **One comment per prompt** — don't batch multiple comments into one decision.
+- **Every decision goes through `AskUserQuestion`** — one call per thread, with
+  an explicit ignore/push-back option. No prose A/B/C prompts, no plain yes/no,
+  regardless of how obvious or how binary the choice looks.
 - **One commit per batch** — never one-per-comment, never a force-push.
 - **Don't auto-resolve** threads the user marked "discuss further" or "skip".
 - **All resolution explanations go on the PR**, not back-channel chat.
