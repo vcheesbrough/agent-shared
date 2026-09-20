@@ -248,3 +248,17 @@ merge, and the card's move to Done that follows it, are the user's.
   context afterwards, pushing you toward compaction mid-card. `Explore` returns
   the conclusion and throws the file dumps away. Read files directly when you
   already know which one you need — that is a lookup, not a search.
+
+## 10. Design knowledge
+
+<!-- Baseline default — a repo may override with its own convention. -->
+
+Cross-repo design decisions live in **topic skills** (in
+`agent-shared/skills/`), not in this file: only a skill's one-line description
+costs context until its topic comes up. **Load the matching skill before
+designing or changing the thing it covers**, and treat it as the default that a
+repo's own `AGENTS.md` may override.
+
+- **`api-versioning`** — any remote API whose clients deploy separately from
+  the server: version negotiation, how the server must behave, the
+  shim-over-shared-implementation structure, and what forces a new version.
