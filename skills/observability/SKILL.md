@@ -101,10 +101,10 @@ decision that gets recorded; it is not the same as not having thought about it.
   with everything that implies, not an open collector port.
 - **Clients never terminate against a collector.** Client telemetry lands on
   something that **authenticates the user through the product's OIDC provider
-  — never an API key or an ingest secret — enforces a per-user quota,
-  rate-limits, caps the decompressed body, and overwrites what the payload
+  — never an API key or an ingest secret — rate-limits by source IP at the edge
+  proxy, caps the decompressed body, and overwrites what the payload
   claims about identity** — and only then re-emits into a collector that stays
-  unreachable. A collector binary supplies none of those five, so it never
+  unreachable. A collector binary supplies none of those four, so it never
   faces a client directly; it sits behind something that does, whether that is
   the product itself or a service written for the job. **There is one ingest
   endpoint per environment**, shared by the services in it: the deployment that

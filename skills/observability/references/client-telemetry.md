@@ -10,33 +10,38 @@ follows from that one difference.
 
 ## The invariant
 
-Client telemetry terminates against something that can do five things:
+Client telemetry terminates against something that can do four things:
 
 1. **authenticate the user against the product's OIDC provider**,
-2. **enforce a per-user quota**,
-3. **rate-limit the caller**,
-4. **cap the decompressed body**, and
-5. **overwrite what the payload claims about identity**.
+2. **rate-limit the caller**,
+3. **cap the decompressed body**, and
+4. **overwrite what the payload claims about identity**.
 
 Only then is it re-emitted into a collector. This holds whether the client sits
 on the local network or on the public internet, and it is a requirement about
 capabilities, not about which binary is listening — the ingest endpoint is an
 OTLP receiver facing users either way.
 
-**A collector binary supplies none of the five.** Alloy and the OpenTelemetry
-Collector have no notion of a user, no quota, no request-level limit, and their
-failure mode under abuse is memory-shaped. So a collector never terminates a
-client connection on its own: it sits behind something that does.
+**Rate limiting and the body cap are the edge proxy's job**, by source IP, and
+that is enough. Per-caller accounting inside the ingest service is not built:
+the edge already bounds the volume, and telemetry loss is tolerated by design —
+a client that gets throttled drops its events and carries on (*What the client
+must do*), so the known weakness of per-IP limiting, that a shared NAT is one
+caller, costs a crowd behind one address some spans rather than costing anyone
+correctness.
 
-A collector *fronted* by layers that supply the rest — edge rate limits and
-body caps at the proxy, processors that overwrite resource attributes — can be
-made to satisfy this, and hosted OTLP endpoints are exactly that. Two things to
-weigh before choosing it over an endpoint you wrote: **per-user quota is the
-capability with no off-the-shelf answer**, and it is the one that decides your
-storage bill; and authentication is the capability a collector most easily
-gains, while being the one that helps least on its own — an authenticated
-caller can still exhaust the budget, and a valid token says nothing about
-whether the `service.name` in the payload is honest.
+**A collector binary supplies none of the four.** Alloy and the OpenTelemetry
+Collector have no notion of a user, no request-level limit, and their failure
+mode under abuse is memory-shaped. So a collector never terminates a client
+connection on its own: it sits behind something that does.
+
+A collector *fronted* by an edge proxy that rate-limits and caps bodies, with
+processors overwriting resource attributes, can be made to satisfy this, and
+hosted OTLP endpoints are exactly that. What is left to weigh is authentication
+and identity: a collector gains authentication most easily, while it is the
+capability that helps least on its own — an authenticated caller can still
+spend the budget — and stamping identity from the authenticated context is the
+part it does worst.
 
 The collector behind the ingest endpoint is protected as any other sidecar:
 loopback or a private network, no published ports, no Docker socket, config the
@@ -48,7 +53,7 @@ app cannot rewrite, memory-limited, and never in a health gate
 **Every environment has exactly one ingest endpoint, shared by every service in
 it.** Production and dev are separate deployments of it, on separate hostnames,
 with separate configuration. One implementation to write, one to operate, one
-place where quotas and caps live.
+edge route to rate-limit.
 
 **The environment stays structural.** `deployment.environment` is stamped by
 the deployment that answered, from its own config, and no request can change
@@ -76,23 +81,22 @@ challenged.
   they become labels.
 
 **Then ask what a lie would buy.** A client claiming another product's name
-pollutes that product's dashboards, spending its own authenticated user's
-quota, inside one environment. It cannot reach another environment, another
+pollutes that product's dashboards, from one authenticated user, inside one
+environment, under the edge's rate limit. It cannot reach another environment, another
 user's data, or anything the product itself protects. That containment is what
 one endpoint per environment still buys; everything finer is a data-quality
 measure, not a security one, and should be argued for on those terms.
 
 ### What the shared endpoint has to carry
 
-One property came free when each service owned its ingest, and now has to be
-built:
+Rate limiting is the edge proxy's, by IP, for every service at once. What does
+not come free is the switch:
 
-- **Quota, rate limit and kill switch, per user and per service.** Previously a
-  service's ingest could be capped or turned off by its own deployment; now
-  they are configuration in the shared service. Keyed on a claimed
-  `service.name` these serve the honest case — a runaway client build, which is
-  what they are for — while the per-user quota is the one that holds
-  regardless.
+- **A kill switch per service.** Previously a service's ingest could be turned
+  off by its own deployment; now it is configuration in the shared service,
+  keyed on the claimed `service.name`. That serves the case it exists for — a
+  runaway client build shipping a telemetry loop — and the edge limit is what
+  holds regardless of what any client claims to be.
 
 **Configuration and ingest can now disagree.** The app tells its clients where
 to send and whether to send; the shared endpoint decides whether it accepts.
@@ -109,9 +113,9 @@ the cookie and forwards to the shared endpoint — a few lines per product, and
 it restores cookie auth and same-origin without giving up the single ingest
 deployment.
 
-The shared endpoint carries the five capabilities of *The invariant*; a
-collector with an auth extension is not one of them unless the missing four are
-supplied in front of it, and per-user quota is the one to check first.
+The shared endpoint carries the four capabilities of *The invariant*; a
+collector with an auth extension is not one of them unless the rest are
+supplied in front of it.
 
 ## Authentication
 
@@ -294,8 +298,9 @@ All of these are mandatory on a public path.
 
 - **Cap the decompressed body, not just the wire body.** OTLP/HTTP accepts
   gzip, and a 1 MiB upload expands to far more. Cap both; reject with 413.
-- **Rate limit per identity and per IP**, the anonymous path harder. A quota in
-  the endpoint, and a limit at the edge proxy in front of it.
+- **Rate limit by source IP at the edge proxy**, with the anonymous path
+  limited harder than the authenticated one. No per-caller accounting inside
+  the endpoint.
 - **Accept only what you use:** `POST`, the traces and logs paths,
   `application/x-protobuf`. Everything else is rejected, not tolerated.
 - **Refuse OTLP metrics from clients.** Arbitrary metric names and labels
@@ -347,9 +352,9 @@ Two consequences of trusting the rest, worth stating once:
 
 ## Operating it
 
-- **Public ingest lets someone else spend your storage and egress.** Set a
-  per-user quota and a global ingest budget, and alert on ingest volume itself,
-  not only on product metrics.
+- **Public ingest lets someone else spend your storage and egress.** The edge
+  rate limit bounds it; **alert on ingest volume itself**, not only on product
+  metrics, so that an unexpected rise is noticed rather than billed.
 - **A kill switch that disables client ingest by config, without a deploy.**
   The first time a client build ships a telemetry loop, this is the only thing
   that stops it.
