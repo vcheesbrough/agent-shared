@@ -113,6 +113,69 @@ dashboard, alert or investigation — may treat what arrives on it as attributed
 to anyone. The moment it grows a device id or an ingest key to "tell clients
 apart", it has become the second identity system this section forbids.
 
+## What the client must do
+
+**Failing to reach the ingest endpoint is a normal condition, not an
+exceptional one.** Phones lose signal, browsers close mid-flush, captive
+portals intercept, blockers cancel the request, and ingest gets turned off
+between one launch and the next. The client treats all of it the same way:
+**drop the events and carry on.** Telemetry loss is never an error the user
+sees, never a crash, never a blocked interaction, and never a reason to try
+harder.
+
+- **Bounded buffer, oldest dropped first.** Cap it by count and by bytes. A
+  buffer that grows until the export succeeds is a memory leak on a device you
+  do not control and cannot debug.
+- **Retry within the session, never beyond it.** A batch may be retried later
+  in the same session, with exponential backoff and jitter and a cap on
+  attempts, after which it is dropped. Nothing is persisted to be re-sent on a
+  later launch — stale telemetry is worth less than the storage and the
+  ingestion-window trouble it causes.
+- **Retry only what is retryable.** `429` and `5xx` are worth backing off and
+  retrying, honouring `Retry-After`. `400`, `401`, `403` and `413` are
+  permanent answers for that payload: drop it. On `401`, stop exporting until
+  the token has been refreshed rather than looping on a token the endpoint has
+  already rejected.
+- **Never on the critical path.** Export happens off the UI thread and outside
+  any interaction. The application behaves identically whether telemetry is
+  working, failing, or switched off entirely.
+- **Assume you are a crowd.** When ingest fails, it usually fails for every
+  client at once, and they all retry together. Backoff with jitter, and give
+  up for the rest of the session after repeated failure — a client fleet
+  retrying in lockstep is a self-inflicted denial of service against the
+  product it is meant to be reporting on.
+- **Flush on the way out, best effort.** A page-hide beacon, a bounded flush
+  when a mobile app backgrounds — never delaying exit, never blocking the
+  close.
+
+## Telemetry configuration comes from the product
+
+**The client has no default endpoint.** It receives its telemetry
+configuration from the product — whether ingest is enabled, where it goes, how
+much to sample — and **in the absence of that configuration it does not
+initialise OTLP at all.** No compiled-in fallback, no endpoint derived from the
+app's own origin, no localhost, no attempt to find out by trying.
+
+This is the client-side form of §2's rule for servers (one endpoint,
+configured, never compiled in) and of §5's rule that disabled is explicit: on a
+client, **absent configuration is disabled**, unambiguously.
+
+It is also what makes the kill switch real. Turning client ingest off has to
+reach clients that are already installed and that you cannot recall; if the
+endpoint is baked into the build, a released client keeps sending to a path you
+have disabled, and the only remedy is an app-store release.
+
+Three consequences to design for:
+
+- **Configuration arrives after startup.** Spans from the launch sequence — the
+  ones you most want — either wait in a small, bounded, short-lived buffer or
+  are discarded. If configuration never arrives, they are discarded. Never hold
+  them for the whole session in hope.
+- **A failed configuration fetch is absence, not an error.** No telemetry, no
+  aggressive retry, no message to the user.
+- **Configuration changes between launches**, in both directions. The client
+  honours the newest it has been given, including "off".
+
 ## Edge controls
 
 All of these are mandatory on a public path.

@@ -216,6 +216,12 @@ product code ──► the language's logging / span / metric façade
 - **Never block a request on an export.** Bounded queues, background export,
   drop on backpressure, and a counter for what was dropped — telemetry that can
   exhaust memory under load is a self-inflicted incident.
+- **On a client, the same rule is stricter.** A client that cannot reach its
+  ingest endpoint drops the events and carries on — bounded buffer, backoff
+  with jitter, retries confined to the session, nothing on the critical path,
+  nothing the user ever sees. And a client with no telemetry configuration does
+  not start telemetry at all: absent configuration is disabled
+  (`references/client-telemetry.md`).
 - **Never in the health gate.** Readiness and liveness checks, deploy smoke
   tests and CI gates do not depend on telemetry reaching anything.
 - **No secrets, credentials, tokens or payloads.** Not in span attributes, not
