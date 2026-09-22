@@ -192,13 +192,13 @@ clients the provider will mint tokens for, under which flows, with what
 lifetime — and it is settled in the provider's configuration, not at the ingest
 endpoint.
 
-Three kinds of input arrive, and only one of them is hostile:
+Three kinds of input arrive, and they are treated differently:
 
 | Source | Treatment |
 | --- | --- |
 | Signed by the provider — identity, audience, scope | Validated once against the closed list, then relied on |
 | Chosen by the caller — the route, and which token to send | Bounded by routing and the audience check; what remains is data quality, not security |
-| The request body — everything OTLP carries | Unsigned: overwritten, bounded or dropped |
+| The request body — everything OTLP carries | Trusted as sent, apart from the short list in *What the endpoint changes about the payload* |
 
 **Tokens expire, and the exporter must notice.** Let the client's existing OIDC
 stack refresh, and make sure the OTLP exporter reads the current token **per
@@ -304,39 +304,46 @@ All of these are mandatory on a public path.
   Take traces and logs; derive metrics from spans server-side.
 - **Timeouts**, and no keeping slow uploads alive.
 
-## Treat the payload as hostile
+## What the endpoint changes about the payload
 
-Everything here concerns the **request body** — the unsigned part, which the
-client composes freely. The token was settled above and is not revisited.
+**Everything the client sends is trusted as sent, except what this section
+lists.** A field or attribute not named here is the client's to state and the
+endpoint's to pass through unread: there is no allowlist to curate, no schema
+to keep in step with three client builds, and nothing further to decide. Values
+are believed; the limits below are about volume, not honesty, and apply to
+everything.
 
-- **Overwrite where you can.** `deployment.environment` is stamped by the
-  receiving deployment from its own config, and the user and session identity
-  from the authenticated context (named below). `service.name` is the
-  exception: it is taken from the client and bounded to a known set. Whatever the client claimed
-  is discarded, not merged. The client kind comes from the route, checked
-  against the token's audience and recorded as corroborated rather than proven.
-- **`service.version` on a client span is the client's build, not the
-  receiver's.** Do not stamp the receiving deployment's version onto a span
-  that came from somewhere else; if the receiver's own version is useful, it
-  goes in an attribute of its own.
-- **What only the client knows stays client-asserted.** Its build version,
-  platform, OS, locale and device class cannot be derived from the request, so
-  keep them, bound them to an expected shape, and treat them as assertion
-  rather than fact. Nothing that must be true — routing, tenancy, retention,
-  quota — may depend on them, and neither may anything that must be true depend
-  on the client kind.
-- **Bound attribute count and value length**; drop what exceeds them.
-- **Mark client-origin spans** (`telemetry.source=client`). Trace ids are
+The complete set of exceptions:
+
+- **Stamped by the endpoint, whatever the client sent.**
+  `deployment.environment` from the receiving deployment's own config, and the
+  user and session identity from the authenticated context (named below). What
+  the client claimed is discarded, not merged.
+- **`service.name` is bounded**, not overwritten: taken from the client, and
+  required to match a known set of service names — a cardinality guard,
+  because it becomes a stream label downstream.
+- **`service.version` is the client's build, not the receiver's.** Do not stamp
+  the receiving deployment's version onto a span that came from somewhere else;
+  if the receiver's own version is useful, it goes in an attribute of its own.
+- **Client-origin spans are marked** (`telemetry.source=client`). Trace ids are
   chosen by the client, and a user trivially knows their own, so spans can be
   injected into a trace the server also writes to. Guessing a stranger's
   128-bit id is impractical; injecting into a known one is not. The marker is
   what lets a reader tell which spans the server vouches for.
-- **Clamp timestamps.** Device clocks are wrong, and mobile clients flush
+- **Timestamps are clamped.** Device clocks are wrong, and mobile clients flush
   offline buffers hours later. Reject far-future outright, and set a far-past
   policy that matches the backends' ingestion windows — otherwise the store
   silently drops exactly the offline data the buffering was built for.
-- **Keep client attributes out of metric labels**, always (`../SKILL.md` §4). A
-  label fed from client input is an unbounded label by definition.
+- **Attribute count and value length are capped**, and what exceeds them is
+  dropped. A volume control, applied without reading anything.
+
+Two consequences of trusting the rest, worth stating once:
+
+- **Nothing that must be true may depend on a client-stated value** — routing,
+  tenancy, retention, quota, access. Trusting a value for telemetry is not
+  trusting it for decisions.
+- **Client values never become metric labels** (`../SKILL.md` §4). That is a
+  cardinality rule, not a trust one, and it survives everything above.
 
 ## Operating it
 
