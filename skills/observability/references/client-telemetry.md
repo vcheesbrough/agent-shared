@@ -301,6 +301,19 @@ harder.
 - **Flush on the way out, best effort.** A page-hide beacon, a bounded flush
   when a mobile app backgrounds — never delaying exit, never blocking the
   close.
+- **Say so locally.** A failed export is the one failure that cannot report
+  itself: the channel that would have carried the news is the broken one. So
+  the client writes to whatever local mechanism the platform has — the
+  JavaScript console in a browser, the system log on Android or a desktop
+  client — at warning level. Never a dialog, a toast, or anything else a user
+  is made to read. Carry the status or error kind, the endpoint, and how many
+  events were dropped; never the token, and nothing personal.
+- **Log transitions, not batches.** The first failure, the return to working,
+  and the decision to give up for the session. A line per dropped batch floods
+  the very tool someone would use to debug the page, which makes the diagnostic
+  worse than silence. The same at startup: when no telemetry configuration
+  arrived and OTLP was therefore never initialised, say so once — that line is
+  the answer to "why are there no spans from this build".
 
 ## Telemetry configuration comes from the product
 
