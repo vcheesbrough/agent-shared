@@ -249,23 +249,23 @@ do the latter by default. The failure is silent: an expired token gives a
 non-retryable 4xx, the batch is dropped, and the signal that would have told
 you is the one that just stopped.
 
-**Decide the pre-authentication case deliberately.** Crashes during startup,
-failed logins and broken OIDC redirects are among the most valuable traces a
-product can collect, and in every one of them the user has no token. Either:
+**There is no anonymous ingest.** Every accepted request carries an
+authenticated identity. The endpoint offers no unauthenticated route, no device
+id, no installation id and no ingest key — nothing that would tell unidentified
+callers apart, because anything that did would be a second identity system,
+weaker than the one the product already has. It also removes the separate
+limits, separate retention and separate attack surface such a route would need.
 
-- **drop it**, accepting blindness exactly where authentication is broken; or
-- **accept it on a separate anonymous path** with its own `service.name`
-  (`<app>-spa-anon`), per-IP rate limits, aggressive sampling and shorter
-  retention, never merged with authenticated data.
+**Pre-authentication telemetry is emitted locally instead.** Crashes during
+startup, failed logins and broken OIDC redirects happen when there is no
+identity to send under, and they are still worth recording — so the client
+writes them through the platform's own mechanism, the JavaScript console or the
+system log (*What the client must do*), and sends nothing.
 
-The second is usually right, and it is a distinct attackable surface that gets
-built as one. What is not acceptable is discovering the question in production.
-
-**An anonymous path is not a second authentication scheme.** It carries no
-identity at all, it is labelled as unidentified, and nothing downstream —
-dashboard, alert or investigation — may treat what arrives on it as attributed
-to anyone. The moment it grows a device id or an ingest key to "tell clients
-apart", it has become the second identity system this section forbids.
+The cost, stated once and accepted: those events reach nobody unless someone
+can read that device's logs. Failures before a user is authenticated are
+visible in development and in a support conversation, not on a dashboard. That
+is the price of having no unauthenticated public surface at all.
 
 ## What the client must do
 
@@ -350,9 +350,8 @@ All of these are mandatory on a public path.
 
 - **Cap the decompressed body, not just the wire body.** OTLP/HTTP accepts
   gzip, and a 1 MiB upload expands to far more. Cap both; reject with 413.
-- **Rate limit by source IP at the edge proxy**, with the anonymous path
-  limited harder than the authenticated one. No per-caller accounting inside
-  the endpoint.
+- **Rate limit by source IP at the edge proxy.** No per-caller accounting
+  inside the endpoint.
 - **Accept only what you use:** `POST`, the traces and logs paths,
   `application/x-protobuf`. Everything else is rejected, not tolerated.
 - **Refuse OTLP metrics from clients.** Arbitrary metric names and labels
