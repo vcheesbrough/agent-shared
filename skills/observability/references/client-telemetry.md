@@ -87,22 +87,24 @@ user's data, or anything the product itself protects. That containment is what
 one endpoint per environment still buys; everything finer is a data-quality
 measure, not a security one, and should be argued for on those terms.
 
-### What the shared endpoint has to carry
+### Stopping it
 
-Rate limiting is the edge proxy's, by IP, for every service at once. What does
-not come free is the switch:
+There is no kill switch and no per-service disable. **The remedy is stopping
+the ingest deployment** — one container, one environment, every client of every
+service refused at once. It works because clients tolerate an unreachable
+endpoint by design (*What the client must do*): they drop their events and
+carry on, and no product is affected by the absence.
 
-- **A kill switch per service.** Previously a service's ingest could be turned
-  off by its own deployment; now it is configuration in the shared service,
-  keyed on the claimed `service.name`. That serves the case it exists for — a
-  runaway client build shipping a telemetry loop — and the edge limit is what
-  holds regardless of what any client claims to be.
+It is all-or-nothing within an environment, so a runaway build in one product
+silences telemetry for the others until it is dealt with. With one shared
+endpoint and an edge rate limit already bounding the volume, that is the trade
+taken — a switch that exists in config is a thing to build, test and remember,
+and `docker stop` is none of those.
 
-**Configuration and ingest can now disagree.** The app tells its clients where
-to send and whether to send; the shared endpoint decides whether it accepts.
-When those disagree, clients send to a door that answers `403`, which they
-handle correctly and which moves the rejection counter — so the disagreement is
-visible rather than silent.
+**The app's telemetry configuration and the endpoint's availability can
+disagree**, and nothing needs to reconcile them: the app tells its clients
+where to send, the endpoint may not be there, and a client handles that exactly
+as it handles every other ingest failure.
 
 **Same-origin is what is given up**, and the browser pays for it: the session
 cookie no longer applies to a different host, so the browser needs an access
@@ -276,10 +278,11 @@ This is the client-side form of §2's rule for servers (one endpoint,
 configured, never compiled in) and of §5's rule that disabled is explicit: on a
 client, **absent configuration is disabled**, unambiguously.
 
-It is also what makes the kill switch real. Turning client ingest off has to
-reach clients that are already installed and that you cannot recall; if the
-endpoint is baked into the build, a released client keeps sending to a path you
-have disabled, and the only remedy is an app-store release.
+It is also what lets a deployment change its mind about clients it cannot
+recall. Where the endpoint moves, or an environment stops offering ingest, a
+configured client follows on its next launch; a client with the endpoint baked
+into its build keeps hammering the old address until an app-store release
+catches up with it.
 
 Three consequences to design for:
 
@@ -355,11 +358,11 @@ Two consequences of trusting the rest, worth stating once:
 - **Public ingest lets someone else spend your storage and egress.** The edge
   rate limit bounds it; **alert on ingest volume itself**, not only on product
   metrics, so that an unexpected rise is noticed rather than billed.
-- **A kill switch that disables client ingest by config, without a deploy.**
-  The first time a client build ships a telemetry loop, this is the only thing
-  that stops it.
-- **Client ingest is off until an environment enables it**, so a new
-  environment never starts accepting volume nobody has looked at.
+- **Stopping the ingest deployment is the emergency stop** (*Stopping it*).
+  There is nothing else to reach for, and nothing else to keep working.
+- **An environment without the ingest deployment has no client telemetry**, and
+  its apps hand out no telemetry configuration, so a new environment never
+  starts accepting volume nobody has looked at.
 - **Never in the deploy health gate.** An ingest failure must not fail a
   product deploy.
 
