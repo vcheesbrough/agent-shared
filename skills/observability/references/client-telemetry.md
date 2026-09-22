@@ -12,7 +12,7 @@ follows from that one difference.
 
 Client telemetry terminates against something that can do five things:
 
-1. **authenticate the user**,
+1. **authenticate the user against the product's OIDC provider**,
 2. **enforce a per-user quota**,
 3. **rate-limit the caller**,
 4. **cap the decompressed body**, and
@@ -62,11 +62,38 @@ it, and per-user quota is the one to check first.
 
 ## Authentication
 
-The client holds a *user* token, so OIDC fits here in a way it does not for
-server-side export (which has no user and needs a machine identity). Require a
-narrow scope — `telemetry:write` — and let the client's existing OIDC stack
-handle refresh. Browsers use the session cookie; mobile clients send the bearer
-token they already hold.
+**Client telemetry is authenticated by OIDC.** The client holds a *user*
+identity, so OIDC fits here in a way it does not for server-side export (which
+has no user and needs a machine identity). The identity on a telemetry request
+is the one the product's identity provider issued — never an API key, never a
+shared ingest secret, never a client-generated device or installation id.
+Anything else is a second identity system, and it would be the weakest one the
+product has.
+
+Two forms are acceptable:
+
+- **A bearer access token from the identity provider.** The canonical form, and
+  the only one available to a native client or to a dedicated ingest service on
+  a different origin. The endpoint validates it as it would any other API call:
+  signature against the issuer's JWKS, issuer, **audience**, expiry, and a
+  narrow scope such as `telemetry:write`.
+- **A session cookie representing an OIDC session**, for same-origin ingest on
+  the product's own hostname. Acceptable because the session was established by
+  OIDC login and the ingest route re-checks it exactly as every other
+  authenticated route does — including the scope or entitlement, not merely
+  "is logged in". It keeps the access token out of JavaScript, which is why
+  it's the better browser option.
+
+**Validate audience, not just signature.** A token the provider minted for a
+different client is a valid token; accepting it makes the ingest endpoint a
+confused deputy for every application in the estate.
+
+**Tokens expire, and the exporter must notice.** Let the client's existing OIDC
+stack refresh, and make sure the OTLP exporter reads the current token **per
+request** rather than binding a header once at initialisation — several SDKs
+do the latter by default. The failure is silent: an expired token gives a
+non-retryable 4xx, the batch is dropped, and the signal that would have told
+you is the one that just stopped.
 
 **Decide the pre-authentication case deliberately.** Crashes during startup,
 failed logins and broken OIDC redirects are among the most valuable traces a
@@ -79,6 +106,12 @@ product can collect, and in every one of them the user has no token. Either:
 
 The second is usually right, and it is a distinct attackable surface that gets
 built as one. What is not acceptable is discovering the question in production.
+
+**An anonymous path is not a second authentication scheme.** It carries no
+identity at all, it is labelled as unidentified, and nothing downstream —
+dashboard, alert or investigation — may treat what arrives on it as attributed
+to anyone. The moment it grows a device id or an ingest key to "tell clients
+apart", it has become the second identity system this section forbids.
 
 ## Edge controls
 

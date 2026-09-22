@@ -100,7 +100,8 @@ decision that gets recorded; it is not the same as not having thought about it.
   phones and browsers has to accept it publicly. That path is a public API,
   with everything that implies, not an open collector port.
 - **Clients never terminate against a collector.** Client telemetry lands on
-  something that **authenticates the user, enforces a per-user quota,
+  something that **authenticates the user through the product's OIDC provider
+  — never an API key or an ingest secret — enforces a per-user quota,
   rate-limits, caps the decompressed body, and overwrites what the payload
   claims about identity** — and only then re-emits into a collector that stays
   unreachable. A collector binary supplies none of those five, so it never
