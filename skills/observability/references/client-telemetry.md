@@ -8,6 +8,15 @@ a device you do not control, sent by a build you cannot recall, across a
 network you do not own, by a user who may be adversarial. Every rule here
 follows from that one difference.
 
+**None of this applies to backend services.** A service that can share an
+internal network with the platform's shared collector — the homelab's Alloy on
+the Docker network — exports to it directly: no ingest service, no token, none
+of the rules below. The ingest pair exists for callers that cannot be on that
+network, which normally means browsers and phones. A backend that genuinely
+cannot reach the collector, because it runs somewhere else entirely, is the
+rare exception and uses this path like any other remote client, authenticating
+as a service account (*Authentication*).
+
 **Environment**, throughout, means *one deployment of one product* — `v-note`'s
 production, `bored`'s dev. A product may be several services, which share its
 environment; two products never share one, and products do not have matching
