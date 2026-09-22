@@ -8,6 +8,12 @@ a device you do not control, sent by a build you cannot recall, across a
 network you do not own, by a user who may be adversarial. Every rule here
 follows from that one difference.
 
+**Environment**, throughout, means *one deployment of one product* — `v-note`'s
+production, `bored`'s dev. A product may be several services, which share its
+environment; two products never share one, and products do not have matching
+sets of them. "Per environment" below therefore means per product *and* per
+environment, never one thing across the estate.
+
 ## The invariant
 
 Client telemetry terminates against something that can do four things:
@@ -50,10 +56,11 @@ app cannot rewrite, memory-limited, and never in a health gate
 
 ## One endpoint per environment
 
-**Every environment has exactly one ingest endpoint, shared by every service in
-it.** Production and dev are separate deployments of it, on separate hostnames,
-with separate configuration. One implementation to write, one to operate, one
-edge route to rate-limit.
+**Every environment has exactly one ingest endpoint, shared by the services of
+that product.** A product's production and dev are separate deployments of it,
+on separate hostnames, with separate configuration, and another product's
+environments are separate again. One implementation to write, deployed once per
+environment that exists.
 
 **The ingest service and its collector are one unit, deployed per
 environment.** The service is the first thing to read the request after the
@@ -64,52 +71,65 @@ client ──► Traefik ──► ingest service ──► collector ──► 
            TLS          validates token   internal,
            rate limit   stamps identity   unreachable
            body cap     bounds, clamps    from outside
-                        └──── one pair, per environment ────┘
+                        └─ one pair, per product environment ─┘
 ```
 
-**The environment stays structural.** `deployment.environment` is stamped by
-the deployment that answered, from its own config, and no request can change
-it: a dev client cannot land in production, because production is a different
-deployment at a different address. That is the boundary this design keeps, and
-it is the one that matters most — dev data in production dashboards is the
-failure that wastes an incident.
+**The product and the environment are both structural.** Each is stamped by the
+deployment that answered, from its own config, and no request can change
+either: a dev client cannot land in production, and one product's client cannot
+land in another product's data, because each is a different deployment at a
+different address. That is the boundary this design keeps, and it is the one
+that matters most — dev data in production dashboards is the failure that
+wastes an incident.
+
+Because the pair belongs to one product, it can be routed under that product's
+own hostname — the edge sends `/otlp/*` to the ingest service and everything
+else to the app — which costs nothing and removes both the CORS preflight and
+the ad-blocker exposure of a separate telemetry hostname. Cookie authentication
+needs one thing more: the ingest service must be able to validate the app's
+session, which means sharing that mechanism with it. Where it cannot, browsers
+send a bearer token, and same-origin still pays for itself.
 
 **`service.name` comes from the client, and is trusted.** No mapping to
-maintain, no registration to resolve: the client states which product it is and
-the endpoint takes it. One guard remains, and it is not about honesty — the
-value must match a known set of service names, because `service.name` becomes a
-stream label downstream and an arbitrary string from a client is a cardinality
-problem whether or not anyone is lying.
+maintain, no registration to resolve: the client states which of the product's
+services it belongs to and the endpoint takes it. One guard remains, and it is
+not about honesty — the value must match that product's known set of service
+names, because `service.name` becomes a stream label downstream and an
+arbitrary string from a client is a cardinality problem whether or not anyone
+is lying.
 
 ### What the endpoint can actually prove
 
 Two tiers, and the difference matters the moment a number on a dashboard is
 challenged.
 
-- **Structural — the caller cannot choose it.** The environment, stamped by the
-  deployment that answered; and the user, from claims the provider signed.
-- **Asserted — the client says so.** The service, the client kind, the build
-  version, the platform, the device class. Taken at face value, bounded where
-  they become labels.
+- **Structural — the caller cannot choose it.** The product and the
+  environment, stamped by the deployment that answered; and the user, from
+  claims the provider signed.
+- **Asserted — the client says so.** Which of the product's services it is, the
+  client kind, the build version, the platform, the device class. Taken at face
+  value, bounded where they become labels.
 
-**Then ask what a lie would buy.** A client claiming another product's name
-pollutes that product's dashboards, from one authenticated user, inside one
-environment, under the edge's rate limit. It cannot reach another environment, another
-user's data, or anything the product itself protects. That containment is what
-one endpoint per environment still buys; everything finer is a data-quality
-measure, not a security one, and should be argued for on those terms.
+**Then ask what a lie would buy.** A client naming the wrong one of its own
+product's services mislabels a breakdown inside that product's own data, from
+one authenticated user, in one environment, under the edge's rate limit. It
+cannot reach another product, another environment, another user's data, or
+anything the product itself protects. That containment is what a pair per
+product environment buys; everything finer is a data-quality measure, not a
+security one, and should be argued for on those terms.
 
 ### Stopping it
 
 There is no kill switch and no per-service disable. **The remedy is stopping
-the pair** — the environment's ingest service and its collector — and every
-client of every service in that environment is refused at once. It works
-because clients tolerate an unreachable endpoint by design (*What the client
-must do*): they drop their events and carry on, and no product is affected by
-the absence.
+the pair** — that environment's ingest service and its collector — and every
+client of every service in it is refused at once. It works because clients
+tolerate an unreachable endpoint by design (*What the client must do*): they
+drop their events and carry on, and the product is not affected by the absence.
 
-It is all-or-nothing within an environment, so a runaway build in one product
-silences client telemetry for the others until it is dealt with. Server-side
+It is all-or-nothing within one product's environment, and stops nothing
+elsewhere: other products keep ingesting, and that product's other environments
+are untouched. What it costs is that a runaway build in one of the product's
+services silences client telemetry for its siblings too. Server-side
 telemetry is untouched — services export to their own collector on a path that
 has nothing to do with this one — so what is lost is client spans, not
 visibility. With the edge rate limit already bounding volume, that is the trade

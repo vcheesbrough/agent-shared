@@ -106,10 +106,11 @@ decision that gets recorded; it is not the same as not having thought about it.
   claims about identity** — and only then re-emits into a collector that stays
   unreachable. A collector binary supplies none of those four, so it never
   faces a client directly; it sits behind something that does, whether that is
-  the product itself or a service written for the job. **There is one ingest
-  endpoint per environment**, shared by the services in it: the deployment that
-  receives a span is what makes `deployment.environment` trustworthy, while
-  `service.name` is taken from the client and bounded to a known set.
+  the product itself or a service written for the job. **One ingest service and
+  its collector are deployed as a pair, per product per environment**, shared
+  by that product's services: the deployment that receives a span is what makes
+  the product and `deployment.environment` trustworthy, while `service.name` is
+  taken from the client and bounded to that product's known set.
   Client telemetry is user-controlled input and is handled as such: see
   `references/client-telemetry.md` before accepting any.
 - **Deviations are recorded.** A platform that can only scrape (a Prometheus
