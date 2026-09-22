@@ -321,8 +321,8 @@ Everything here concerns the **request body** — the unsigned part, which the
 client composes freely. The token was settled above and is not revisited.
 
 - **Overwrite, do not trust.** `service.name` and `deployment.environment` are
-  stamped by the receiving deployment from its own config, and the user or
-  session identity from the authenticated context. Whatever the client claimed
+  stamped by the receiving deployment from its own config, and the user and
+  session identity from the authenticated context (named below). Whatever the client claimed
   is discarded, not merged. The client kind comes from the route, checked
   against the token's audience and recorded as corroborated rather than proven.
 - **`service.version` on a client span is the client's build, not the
@@ -360,6 +360,38 @@ client composes freely. The token was settled above and is not revisited.
   environment never starts accepting volume nobody has looked at.
 - **Never in the deploy health gate.** An ingest failure must not fail a
   product deploy.
+
+## Which attributes carry identity
+
+OpenTelemetry has two overlapping namespaces for this, and every attribute in
+both is still marked **Development** — expect the names to move, and keep them
+behind whatever the telemetry module already centralises.
+
+- **`enduser.pseudo.id`** — "a random value that is not directly linked or
+  associated with the end user's actual identity". **The default for client
+  telemetry.** The ingest endpoint stamps it from the authenticated subject as
+  a stable per-environment pseudonym — a keyed hash of the OIDC `sub` — so the
+  telemetry store can correlate one user's spans without being able to name
+  them.
+- **`enduser.id`** — "unique identifier of an end user in the system… may be a
+  username, email address, or other identifier", and flagged in the registry as
+  carrying PII. Use it only where identifying the person from a trace is a
+  requirement the product actually has, and never put an email or a login in
+  it.
+- **`user.*`** — `user.id`, `user.name`, `user.email`, `user.hash`,
+  `user.roles`: the ECS-aligned namespace, and where the deprecated
+  `enduser.role` now points. It describes a user as the subject of an event;
+  for the authenticated principal of an inbound request, `enduser.*` is the
+  closer fit.
+- **`session.id`**, with `session.previous_id` — the client session a group of
+  spans, logs and events belongs to. It is the attribute designed for this
+  case, and it is what most client-side investigations actually group by.
+
+The client sets none of these. The endpoint stamps them from the authenticated
+context and discards whatever arrived. Keep the pseudonym's key somewhere the
+telemetry store cannot reach, so that access to traces is not access to
+identities — and note that rotating it buys unlinkability at the price of every
+longitudinal comparison across the rotation.
 
 ## Privacy and retention
 
