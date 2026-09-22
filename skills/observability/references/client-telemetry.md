@@ -10,19 +10,38 @@ follows from that one difference.
 
 ## The invariant
 
-**A collector's OTLP receiver never faces the internet** — not even one that
-validates OIDC. A collector has no per-user quota, no request-level rate limit
-and no notion of an abusive caller, and its failure mode under load is
-memory-shaped.
+Client telemetry terminates against something that can do five things:
 
-What faces the internet is an **ingest endpoint you own**, which authenticates,
-bounds, sanitises and re-emits into a collector that stays unreachable. The
-collector behind it is protected exactly as any other sidecar: loopback or a
-private network, no published ports, no Docker socket, config the app cannot
-rewrite, memory-limited, and never in a health gate (`../SKILL.md` §6).
+1. **authenticate the user**,
+2. **enforce a per-user quota**,
+3. **rate-limit the caller**,
+4. **cap the decompressed body**, and
+5. **overwrite what the payload claims about identity**.
 
-This holds whether the client is on the local network or on the public
-internet. Nothing below replaces it.
+Only then is it re-emitted into a collector. This holds whether the client sits
+on the local network or on the public internet, and it is a requirement about
+capabilities, not about which binary is listening — the ingest endpoint is an
+OTLP receiver facing users either way.
+
+**A collector binary supplies none of the five.** Alloy and the OpenTelemetry
+Collector have no notion of a user, no quota, no request-level limit, and their
+failure mode under abuse is memory-shaped. So a collector never terminates a
+client connection on its own: it sits behind something that does.
+
+A collector *fronted* by layers that supply the rest — edge rate limits and
+body caps at the proxy, processors that overwrite resource attributes — can be
+made to satisfy this, and hosted OTLP endpoints are exactly that. Two things to
+weigh before choosing it over an endpoint you wrote: **per-user quota is the
+capability with no off-the-shelf answer**, and it is the one that decides your
+storage bill; and authentication is the capability a collector most easily
+gains, while being the one that helps least on its own — an authenticated
+caller can still exhaust the budget, and a valid token says nothing about
+whether the `service.name` in the payload is honest.
+
+The collector behind the ingest endpoint is protected as any other sidecar:
+loopback or a private network, no published ports, no Docker socket, config the
+app cannot rewrite, memory-limited, and never in a health gate
+(`../SKILL.md` §6).
 
 ## Two topologies
 
@@ -36,7 +55,10 @@ it already knows the user.
 **A dedicated ingest service** on its own hostname — when telemetry volume
 would threaten the product's own capacity, or when several products share one
 ingest. It costs CORS, a token in the browser, ad-blocker exposure and a second
-auth implementation, so take it for the volume argument, not for tidiness.
+auth implementation, so take it for the volume argument, not for tidiness. It
+carries the same five capabilities as the app would; a collector with an auth
+extension is not one of these unless the missing four are supplied in front of
+it, and per-user quota is the one to check first.
 
 ## Authentication
 

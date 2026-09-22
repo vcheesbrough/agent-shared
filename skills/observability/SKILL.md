@@ -93,14 +93,19 @@ decision that gets recorded; it is not the same as not having thought about it.
 - **The product knows nothing behind the collector.** It does not know which
   store receives a signal, nor the retention, nor whether the collector
   samples. Changing backends is a platform change with no product release.
-- **Telemetry egress is internal.** Collector ports and any metrics endpoint
-  stay on internal networking, never behind the public router.
-- **Browser and mobile clients do not talk to the collector directly**, on any
-  network. Their telemetry goes to an authenticated ingest endpoint on the
-  product, which bounds and sanitises it and re-emits into a collector that
-  stays unreachable. A collector has no per-user quota and no request-level
-  rate limit, so exposing one — even behind authentication — is an
-  ingestion-cost attack and a spoofing surface. Client telemetry is
+- **Egress is internal; ingest may not be.** The product's own export — server
+  process to collector — never crosses a public network, and collector ports
+  and any scrape endpoint stay off the public router. **Telemetry arriving from
+  a user's device is the other direction**, and a product whose clients run on
+  phones and browsers has to accept it publicly. That path is a public API,
+  with everything that implies, not an open collector port.
+- **Clients never terminate against a collector.** Client telemetry lands on
+  something that **authenticates the user, enforces a per-user quota,
+  rate-limits, caps the decompressed body, and overwrites what the payload
+  claims about identity** — and only then re-emits into a collector that stays
+  unreachable. A collector binary supplies none of those five, so it never
+  faces a client directly; it sits behind something that does, whether that is
+  the product itself or a service written for the job. Client telemetry is
   user-controlled input and is handled as such: see
   `references/client-telemetry.md` before accepting any.
 - **Deviations are recorded.** A platform that can only scrape (a Prometheus
