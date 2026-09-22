@@ -57,19 +57,51 @@ product's clients posting to one shared ingest, the only things left to tell
 them apart would be the payload — the untrusted part — or a token claim that
 the ingest service then has to map back to a service it knows nothing about.
 With a per-service endpoint, **the deployment that received the request already
-knows the answer**: it stamps the same `service.name`,
-`deployment.environment` and `service.version` that its own server-side
-telemetry carries, read from its own config. A dev client's spans cannot arrive
-labelled `prod`, because they arrive at a different deployment.
+knows the answer**: it stamps `service.name` and `deployment.environment` from
+its own config, the same values its own server-side telemetry carries. A dev
+client's spans cannot arrive labelled `prod`, because they arrive at a
+different deployment.
 
 Two more things fall out of it:
 
-- **The sub-path carries the client kind.** Separate routes for the browser and
-  the mobile client are what make `<app>-spa` and `<app>-android` trustworthy —
-  again without reading anything the client sent.
+- **The sub-path separates the client kinds** — one route for the browser, one
+  for the mobile client — but separating is not proving. The route is chosen by
+  the caller, and nothing stops a script from posting to the mobile one. Bind
+  the claim to something the caller does not choose alone, and treat what
+  remains as best effort.
 - **One deployment serves the app, its telemetry configuration and its ingest
   path**, so all three agree by construction, and they can be turned off
   together.
+
+### What the endpoint can actually prove
+
+The distinction matters the moment a number on a dashboard is challenged.
+
+- **Structural — the caller cannot lie.** Which service, and which
+  environment. No request can make the v-note production deployment stamp
+  `bored`, or `dev`: those values come from the config of the process that
+  answered, and reaching a different one means reaching a different deployment.
+  This is the boundary worth designing around, and a per-service endpoint is
+  what makes it free.
+- **Corroborated — lying is possible, but it costs something.** The client
+  kind. Give each kind its own OIDC client registration so the browser and the
+  mobile app present tokens with different audiences, and **reject a request
+  whose route disagrees with its token's audience**. A determined user can
+  still run a public client's flow and obtain the other kind's token, so this
+  is a barrier, not a proof; cookie-versus-bearer and the `Origin` header
+  corroborate without proving either. Where the difference genuinely matters —
+  abuse, fraud, a paid tier — device attestation is the only mechanism that
+  actually proves it, and it earns its weight only there.
+- **Asserted — the client says so, and that is all.** Its build version,
+  platform, OS, locale, device class. There is no request-side derivation for
+  any of them.
+
+**Then ask what a lie would buy.** Within one service, a user who mislabels
+their own client kind pollutes that service's platform breakdown using their
+own quota, under their own identity, in their own data. They cannot attribute
+it to another product, another environment or another user. That containment is
+what the per-service endpoint buys; everything finer is a data-quality measure,
+not a security one, and should be argued for on those terms.
 
 Same-domain also happens to be what makes the browser case work: the session
 cookie is already there, there is no CORS preflight, no access token in
@@ -227,17 +259,21 @@ All of these are mandatory on a public path.
 
 ## Treat the payload as hostile
 
-- **Overwrite, do not trust.** `service.name`, `deployment.environment` and
-  `service.version` are stamped by the receiving deployment from its own
-  config — the same values its server-side telemetry carries — and the client
-  kind comes from the route it arrived on. The user or session identity comes
-  from the authenticated context. Whatever the client claimed is discarded,
-  not merged.
-- **What only the client knows stays client-asserted.** Its own build version,
+- **Overwrite, do not trust.** `service.name` and `deployment.environment` are
+  stamped by the receiving deployment from its own config, and the user or
+  session identity from the authenticated context. Whatever the client claimed
+  is discarded, not merged. The client kind comes from the route, checked
+  against the token's audience and recorded as corroborated rather than proven.
+- **`service.version` on a client span is the client's build, not the
+  receiver's.** Do not stamp the receiving deployment's version onto a span
+  that came from somewhere else; if the receiver's own version is useful, it
+  goes in an attribute of its own.
+- **What only the client knows stays client-asserted.** Its build version,
   platform, OS, locale and device class cannot be derived from the request, so
   keep them, bound them to an expected shape, and treat them as assertion
   rather than fact. Nothing that must be true — routing, tenancy, retention,
-  quota — may depend on them.
+  quota — may depend on them, and neither may anything that must be true depend
+  on the client kind.
 - **Bound attribute count and value length**; drop what exceeds them.
 - **Mark client-origin spans** (`telemetry.source=client`). Trace ids are
   chosen by the client, and a user trivially knows their own, so spans can be
