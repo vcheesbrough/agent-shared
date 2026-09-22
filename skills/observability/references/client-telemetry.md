@@ -82,13 +82,24 @@ different address. That is the boundary this design keeps, and it is the one
 that matters most — dev data in production dashboards is the failure that
 wastes an incident.
 
-Because the pair belongs to one product, it can be routed under that product's
-own hostname — the edge sends `/otlp/*` to the ingest service and everything
-else to the app — which costs nothing and removes both the CORS preflight and
-the ad-blocker exposure of a separate telemetry hostname. Cookie authentication
-needs one thing more: the ingest service must be able to validate the app's
-session, which means sharing that mechanism with it. Where it cannot, browsers
-send a bearer token, and same-origin still pays for itself.
+**It is same-origin with the app**, because the pair belongs to that product:
+the edge routes `myapp.example.com/api` to the application and
+`myapp.example.com/otlp` to the ingest service, two containers behind one
+hostname. The app never proxies telemetry — it is not in that path at all —
+and the browser sees one origin, so there is no CORS preflight, no access token
+in JavaScript, and no separate telemetry hostname for a filter list to match.
+
+Three mechanics that follow:
+
+- **The session cookie must reach `/otlp`** — `Path=/`, not a cookie scoped to
+  `/api`. `SameSite=Lax` is fine, these being same-site requests.
+- **The ingest service validates that session itself.** It is a sibling of the
+  app in the same environment, reading the same configuration subtree and the
+  same session secret, so this is shared code rather than a shared service.
+  That sibling relationship is what makes cookie authentication cheap here;
+  it would not be, for an endpoint serving the whole estate.
+- **Mobile clients send a bearer to the same path**, having no cookie. One
+  hostname, one route, two credential forms (*Authentication*).
 
 **`service.name` comes from the client, and is trusted.** No mapping to
 maintain, no registration to resolve: the client states which of the product's
@@ -141,16 +152,7 @@ disagree**, and nothing needs to reconcile them: the app tells its clients
 where to send, the endpoint may not be there, and a client handles that exactly
 as it handles every other ingest failure.
 
-**Same-origin is what is given up**, and the browser pays for it: the session
-cookie no longer applies to a different host, so the browser needs an access
-token in JavaScript, with CORS preflight on every export and ad-blocker
-exposure on a non-first-party hostname. If that trade turns out badly, the
-cheapest repair is a thin same-origin route on each app that authenticates with
-the cookie and forwards to the shared endpoint — a few lines per product, and
-it restores cookie auth and same-origin without giving up the single ingest
-deployment.
-
-The shared endpoint carries the four capabilities of *The invariant*; a
+The ingest service carries the four capabilities of *The invariant*; a
 collector with an auth extension is not one of them unless the rest are
 supplied in front of it.
 
@@ -167,17 +169,16 @@ product has.
 Two forms are acceptable:
 
 - **A bearer access token from the identity provider.** The canonical form, and
-  the only one available to a native client or to a dedicated ingest service on
-  a different origin. The endpoint validates it as it would any other API call:
+  the only one available to a native client, which has no cookie. The endpoint
+  validates it as it would any other API call:
   signature against the issuer's JWKS, issuer, **audience**, expiry, and a
   narrow scope such as `telemetry:write`.
-- **A session cookie representing an OIDC session** — available only where
-  ingest is same-origin with the app, so under the shared endpoint it applies
-  only behind a thin per-app forwarding route. Acceptable because the session
-  was established by OIDC login and that route re-checks it exactly as every
-  other authenticated route does — including the same telemetry permission, not
-  merely "is logged in" (below). It keeps the access token out of JavaScript,
-  which is why it remains the better browser option where it is available.
+- **A session cookie representing an OIDC session** — the browser's form, and
+  available because ingest is same-origin with the app. Acceptable because the
+  session was established by OIDC login and the ingest service re-checks it
+  exactly as every other authenticated route does — including the same
+  telemetry permission, not merely "is logged in" (below). It keeps the access
+  token out of JavaScript, which is why it is the better browser option.
 
 **Validate audience, not just signature.** A token the provider minted for a
 different client is a valid token; accepting it makes the ingest endpoint a
@@ -521,10 +522,10 @@ made; carrying content alongside it is usually an accident.
 
 **Trace continuity is the payoff.** The point of client spans is that a user's
 action and the server work it caused are one trace. The client must propagate
-`traceparent` on its API calls, which for a browser also means the API's CORS
-policy allows the header and the web SDK is configured to propagate to those
-origins. Miss this and you have two disconnected traces and most of the value
-is gone.
+`traceparent` on its API calls, and the web SDK must be configured to propagate
+to the origins it calls — same-origin `/api` needs no CORS allowance, but any
+cross-origin call the app makes does. Miss this and you have two disconnected
+traces and most of the value is gone.
 
 **Late data is normal.** Mobile clients buffer offline and flush on
 reconnection, so plan for spans arriving hours after they happened, and check
