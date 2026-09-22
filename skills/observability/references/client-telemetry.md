@@ -57,67 +57,48 @@ deployment at a different address. That is the boundary this design keeps, and
 it is the one that matters most — dev data in production dashboards is the
 failure that wastes an incident.
 
-**`service.name` is no longer free, so derive it rather than believe it.** In
-descending order of trust:
-
-1. **From the token's client registration.** Each application already needs its
-   own OIDC client — the browser and the mobile client of one product need
-   separate ones — so the token's audience or authorised-party claim identifies
-   the application, and the identity provider attested it. The ingest service
-   keeps one mapping from client id to `service.name` and stamps from that. It
-   costs a table, and it is provider-attested rather than client-asserted.
-2. **From the payload, checked against that mapping.** Where the payload
-   disagrees with what the token implies, the token wins and the disagreement
-   is counted — it is a client bug more often than an attack, and a counter
-   that never moves is cheap.
-3. **From the payload alone**, where a service has no distinct registration.
-   This is trust, plainly, and worth knowing as such.
-
-A service that is not in the mapping is rejected, not admitted under whatever
-name it offered. New products are added to it deliberately, which is also the
-moment someone decides their quota.
+**`service.name` comes from the client, and is trusted.** No mapping to
+maintain, no registration to resolve: the client states which product it is and
+the endpoint takes it. One guard remains, and it is not about honesty — the
+value must match a known set of service names, because `service.name` becomes a
+stream label downstream and an arbitrary string from a client is a cardinality
+problem whether or not anyone is lying.
 
 ### What the endpoint can actually prove
 
-The distinction matters the moment a number on a dashboard is challenged.
+Two tiers, and the difference matters the moment a number on a dashboard is
+challenged.
 
-- **Structural — the caller cannot lie.** The environment. Those values come
-  from the config of the process that answered, and reaching a different one
-  means reaching a different deployment.
-- **Corroborated — lying is possible, but it costs something.** The service,
-  and the client kind, both derived from the token's client registration rather
-  than from the payload. A determined user can still run a public client's flow
-  and obtain another registration's token, so this is a barrier, not a proof;
-  the `Origin` header corroborates without proving. Where the difference
-  genuinely matters — abuse, fraud, a paid tier — device attestation is the
-  only mechanism that actually proves it, and it earns its weight only there.
-- **Asserted — the client says so, and that is all.** Its build version,
-  platform, OS, locale, device class. There is no request-side derivation for
-  any of them.
+- **Structural — the caller cannot choose it.** The environment, stamped by the
+  deployment that answered; and the user, from claims the provider signed.
+- **Asserted — the client says so.** The service, the client kind, the build
+  version, the platform, the device class. Taken at face value, bounded where
+  they become labels.
 
-**Then ask what a lie would buy.** A user who mislabels their own client kind,
-or borrows another product's registration, pollutes a dashboard using their own
-quota, under their own identity, within one environment. They cannot reach
-another environment, another user's data, or anything the product itself
-protects. That containment is what one-endpoint-per-environment still buys;
-everything finer is a data-quality measure, not a security one, and should be
-argued for on those terms.
+**Then ask what a lie would buy.** A client claiming another product's name
+pollutes that product's dashboards, spending its own authenticated user's
+quota, inside one environment. It cannot reach another environment, another
+user's data, or anything the product itself protects. That containment is what
+one endpoint per environment still buys; everything finer is a data-quality
+measure, not a security one, and should be argued for on those terms.
 
 ### What the shared endpoint has to carry
 
-Two properties came free when each service owned its ingest, and now have to be
+One property came free when each service owned its ingest, and now has to be
 built:
 
-- **Per-service quota, rate limit and kill switch.** Previously a service's
-  ingest could be capped or turned off by its own deployment. Now they are
-  configuration in the shared service, keyed by the service the token resolves
-  to, and one product's runaway client build must not be able to spend
-  another's budget.
-- **Agreement between telemetry configuration and ingest.** The app tells its
-  clients where to send and whether to send; the shared endpoint decides
-  whether it will accept. When those disagree, clients send to a door that
-  answers `403` — which they handle correctly, and which shows up on the
-  rejection counter, so the disagreement is visible rather than silent.
+- **Quota, rate limit and kill switch, per user and per service.** Previously a
+  service's ingest could be capped or turned off by its own deployment; now
+  they are configuration in the shared service. Keyed on a claimed
+  `service.name` these serve the honest case — a runaway client build, which is
+  what they are for — while the per-user quota is the one that holds
+  regardless.
+
+**Configuration and ingest can now disagree.** The app tells its clients where
+to send and whether to send; the shared endpoint decides whether it accepts.
+When those disagree, clients send to a door that answers `403`, which they
+handle correctly and which moves the rejection counter — so the disagreement is
+visible rather than silent.
 
 **Same-origin is what is given up**, and the browser pays for it: the session
 cookie no longer applies to a different host, so the browser needs an access
@@ -328,10 +309,10 @@ All of these are mandatory on a public path.
 Everything here concerns the **request body** — the unsigned part, which the
 client composes freely. The token was settled above and is not revisited.
 
-- **Overwrite, do not trust.** `deployment.environment` is stamped by the
-  receiving deployment from its own config, `service.name` from the token's
-  client registration, and the user and session identity from the authenticated
-  context (named below). Whatever the client claimed
+- **Overwrite where you can.** `deployment.environment` is stamped by the
+  receiving deployment from its own config, and the user and session identity
+  from the authenticated context (named below). `service.name` is the
+  exception: it is taken from the client and bounded to a known set. Whatever the client claimed
   is discarded, not merged. The client kind comes from the route, checked
   against the token's audience and recorded as corroborated rather than proven.
 - **`service.version` on a client span is the client's build, not the

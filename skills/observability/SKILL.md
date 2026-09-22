@@ -108,9 +108,8 @@ decision that gets recorded; it is not the same as not having thought about it.
   faces a client directly; it sits behind something that does, whether that is
   the product itself or a service written for the job. **There is one ingest
   endpoint per environment**, shared by the services in it: the deployment that
-  receives a span is what makes `deployment.environment` trustworthy, and
-  `service.name` is derived from the token's client registration rather than
-  believed from the payload.
+  receives a span is what makes `deployment.environment` trustworthy, while
+  `service.name` is taken from the client and bounded to a known set.
   Client telemetry is user-controlled input and is handled as such: see
   `references/client-telemetry.md` before accepting any.
 - **Deviations are recorded.** A platform that can only scrape (a Prometheus
