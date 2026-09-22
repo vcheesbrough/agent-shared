@@ -363,74 +363,88 @@ client composes freely. The token was settled above and is not revisited.
 
 ## Which attributes carry identity
 
-OpenTelemetry has two overlapping namespaces for this, and every attribute in
-both is still marked **Development** — expect the names to move, and keep them
-behind whatever the telemetry module already centralises.
+Identity on client telemetry is carried in the **`user.*`** namespace, stamped
+by the ingest endpoint from the authenticated context. Every attribute here is
+still marked *Development* in OpenTelemetry's registry, so expect the names to
+move and keep them behind whatever the telemetry module already centralises.
 
-- **`enduser.pseudo.id`** — "a random value that is not directly linked or
-  associated with the end user's actual identity". **The default for client
-  telemetry.** The ingest endpoint stamps it from the authenticated subject as
-  a stable per-environment pseudonym — a keyed hash of the OIDC `sub` — so the
-  telemetry store can correlate one user's spans without being able to name
-  them.
-- **`enduser.id`** — "unique identifier of an end user in the system… may be a
-  username, email address, or other identifier", and flagged in the registry as
-  carrying PII. Use it only where identifying the person from a trace is a
-  requirement the product actually has, and never put an email or a login in
-  it.
-- **`user.*`** — `user.id`, `user.name`, `user.email`, `user.hash`,
-  `user.roles`: the ECS-aligned namespace, and where the deprecated
-  `enduser.role` now points. It describes a user as the subject of an event;
-  for the authenticated principal of an inbound request, `enduser.*` is the
-  closer fit.
-- **`session.id`**, with `session.previous_id` — the client session a group of
-  spans, logs and events belongs to. It is the attribute designed for this
-  case, and it is what most client-side investigations actually group by.
-
-### What the endpoint can stamp, and what it should
-
-It holds the token's `sub` always; it holds a name, an email or a set of roles
-only when those claims were granted and stored. Possible and advisable are
-different questions:
-
-| Attribute | Can it? | Should it? |
+| Attribute | Source claim | |
 | --- | --- | --- |
-| `user.hash` | Yes, computed | This is the `user.*` pseudonym. Pick it **or** `enduser.pseudo.id` — emitting both doubles the identity surface for nothing |
-| `user.id` | Yes, from `sub` | Only where telemetry has to join to product data: `sub` names the person to anyone holding both trace access and provider access |
-| `user.roles` | If the token carries groups | No. It is a snapshot that ages badly, in a small tenant a role names a person, and the product can answer role questions from its own data |
-| `user.name`, `user.email`, `user.full_name` | When the token or session carries `preferred_username` / `email` / `name` | No. Direct PII in a store with different access control from the product's own. Look the person up from the identifier instead |
+| `user.id` | `sub` | **Mandatory** |
+| `user.name` | `preferred_username` | **Mandatory** |
+| `user.email` | `email` | Stamped when present |
+| `user.full_name` | `name` | Stamped when present |
 
-**Stamp the minimum that answers a question actually asked.** Each further
-identity attribute is another copy of personal data in a store that is not
-backed up, not access-controlled per user, and readable by everyone with
-Grafana.
+**This is attribution over minimisation, chosen deliberately.** Telemetry that
+names its user answers "what happened to *this* person" directly, without a
+lookup and without a pseudonym table to maintain. The price is in *What follows*
+below, and that price is not optional.
 
-**A claim being in the token is not a reason to use it.** Those profile claims
-arrive whenever the `profile` or `email` scopes were granted, so the endpoint
-often has them for free — and never widen a token's scopes in order to stamp
-them, which would make every service receiving that token a holder of personal
-data. Independently of privacy, an email address or a username is *mutable*:
-it makes a poor correlation key, because a person who changes theirs becomes
-two people in the data. Only `sub`, or a pseudonym derived from it, is stable.
+**Mandatory means the endpoint rejects a token that lacks them** — `403`,
+distinct from an authentication failure, and counted. A valid token without
+`sub` or `preferred_username` is a provider misconfiguration, and the
+alternative is telemetry that cannot be attributed to anyone. It also means the
+provider must emit `preferred_username` on the access token for **every** client
+that sends telemetry: a scope-mapping change there stops ingest here, which is
+worth knowing before someone tidies the provider's scopes.
 
-**One derivation, used everywhere.** The pseudonym the ingest endpoint stamps
-must be the one the product's own server-side request spans stamp — same input,
-same key, same environment. Otherwise one person is two identities, and a
-client span cannot be joined to the server work it caused, which was the point.
+**The optional two are taken when the token already carries them**, and their
+absence is never an error. Do not widen a token's scopes to obtain them: they
+are a convenience, and a token minted wider for telemetry's sake makes every
+service that receives it a holder of more personal data.
 
-The client sets none of these. The endpoint stamps them from the authenticated
-context and discards whatever arrived. Keep the pseudonym's key somewhere the
-telemetry store cannot reach, so that access to traces is not access to
-identities — and note that rotating it buys unlinkability at the price of every
-longitudinal comparison across the rotation.
+Not stamped:
+
+- **`user.roles`** — a snapshot that ages badly, and in a small tenant a role
+  names a person. Role questions are answered from the product's own data.
+- **`user.hash` and `enduser.pseudo.id`** — a pseudonym beside a stamped
+  `user.id` and `user.name` is decorative. The data is identity-bearing by
+  design; pretending otherwise is worse than not pretending.
+
+Stamped alongside them:
+
+- **`session.id`**, with `session.previous_id` — the client session that a
+  group of spans, logs and events belongs to. It is what most client-side
+  investigations actually group by, and unlike the identity attributes it is
+  meaningful without naming anyone.
+
+**One helper, used everywhere.** The ingest endpoint and the product's own
+server-side request spans stamp the same attributes from the same claims.
+Otherwise one person is two identities, and a client span cannot be joined to
+the server work it caused — which was the point of collecting it.
+
+**The client sets none of them.** The endpoint stamps from the authenticated
+context and discards whatever arrived.
+
+### What follows from stamping identity
+
+Three things are now true that were not, and they are obligations rather than
+observations:
+
+- **Access to traces and logs is access to identities.** Grafana, Tempo and
+  Loki permissions are a personal-data control now, not only an operational
+  one, and they are reviewed as such.
+- **Retention is the main mitigation.** A short window is doing real work here:
+  it bounds how long the store holds names. Treat it as a control that is
+  stated and defended, not a storage setting someone may tune upward for
+  convenience.
+- **Deletion has to be answerable.** When a user asks to be deleted, the
+  telemetry store is one of the places holding them. Either deletion reaches it
+  or retention answers within a window you are prepared to state out loud.
+  Decide which, before someone asks.
+
+And one that was already true and now matters more: **these values never become
+metric labels** (`../SKILL.md` §4). They are exactly the unbounded kind.
 
 ## Privacy and retention
 
-Telemetry from a user's device is personal data in a way server telemetry is
-not: IP addresses, user agents, full URLs with query strings, and screen or
-route names that may identify content. Redact at the ingest endpoint, before it
-reaches a store with different access control from the product's database, and
-set a retention period deliberately rather than inheriting the platform's.
+Beyond the identity attributes above, a user's device sends plenty that is
+personal without being meant as identity: IP addresses, user agents, full URLs
+with query strings, and screen or route names that may identify content.
+Redact at the ingest endpoint, before it reaches a store with different access
+control from the product's database, and set a retention period deliberately
+rather than inheriting the platform's. Stamping identity is a decision that was
+made; carrying content alongside it is usually an accident.
 
 ## Making it worth the trouble
 
