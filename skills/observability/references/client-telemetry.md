@@ -398,12 +398,20 @@ different questions:
 | `user.hash` | Yes, computed | This is the `user.*` pseudonym. Pick it **or** `enduser.pseudo.id` — emitting both doubles the identity surface for nothing |
 | `user.id` | Yes, from `sub` | Only where telemetry has to join to product data: `sub` names the person to anyone holding both trace access and provider access |
 | `user.roles` | If the token carries groups | Optional and genuinely useful — bounded, and it answers "who hits this path". In a small tenant a role still names a person |
-| `user.name`, `user.email`, `user.full_name` | If the profile was stored | No. Direct PII in a store with different access control from the product's own. Look the person up from the identifier instead |
+| `user.name`, `user.email`, `user.full_name` | When the token or session carries `preferred_username` / `email` / `name` | No. Direct PII in a store with different access control from the product's own. Look the person up from the identifier instead |
 
 **Stamp the minimum that answers a question actually asked.** Each further
 identity attribute is another copy of personal data in a store that is not
 backed up, not access-controlled per user, and readable by everyone with
 Grafana.
+
+**A claim being in the token is not a reason to use it.** Those profile claims
+arrive whenever the `profile` or `email` scopes were granted, so the endpoint
+often has them for free — and never widen a token's scopes in order to stamp
+them, which would make every service receiving that token a holder of personal
+data. Independently of privacy, an email address or a username is *mutable*:
+it makes a poor correlation key, because a person who changes theirs becomes
+two people in the data. Only `sub`, or a pseudonym derived from it, is stable.
 
 **One derivation, used everywhere.** The pseudonym the ingest endpoint stamps
 must be the one the product's own server-side request spans stamp — same input,
