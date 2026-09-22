@@ -1,6 +1,6 @@
 ---
 name: observability
-description: Observability contract for a product that runs somewhere you cannot attach a debugger - what a product must emit to be operable, why all three signals leave the process over OTLP to a collector that the product knows nothing behind, how the telemetry module is structured so exporter types never reach product code, and the cardinality rules that keep metrics affordable. Observability is part of the MVP bar, not a follow-up. Language- and backend-agnostic. Load before designing a service's telemetry, adding or changing a metric, span, log field, dashboard or alert, taking a product to 1.0.0, or debugging why a deployed product cannot be diagnosed.
+description: Observability contract for a product that runs somewhere you cannot attach a debugger - what a product must emit to be operable, why all three signals leave the process over OTLP to a collector that the product knows nothing behind, how the telemetry module is structured so exporter types never reach product code, and the cardinality rules that keep metrics affordable. Observability is part of the MVP bar, not a follow-up. Language- and backend-agnostic. Load before designing a service's telemetry, accepting OTLP from browser or mobile clients, adding or changing a metric, span, log field, dashboard or alert, taking a product to 1.0.0, or debugging why a deployed product cannot be diagnosed.
 ---
 
 # observability
@@ -95,10 +95,14 @@ decision that gets recorded; it is not the same as not having thought about it.
   samples. Changing backends is a platform change with no product release.
 - **Telemetry egress is internal.** Collector ports and any metrics endpoint
   stay on internal networking, never behind the public router.
-- **Browser and mobile clients do not talk to the collector directly.** Their
-  telemetry goes to an authenticated endpoint on the product, which proxies it
-  onward with a size cap. An unauthenticated collector open to the internet is
-  an ingestion-cost attack and a spoofing surface.
+- **Browser and mobile clients do not talk to the collector directly**, on any
+  network. Their telemetry goes to an authenticated ingest endpoint on the
+  product, which bounds and sanitises it and re-emits into a collector that
+  stays unreachable. A collector has no per-user quota and no request-level
+  rate limit, so exposing one — even behind authentication — is an
+  ingestion-cost attack and a spoofing surface. Client telemetry is
+  user-controlled input and is handled as such: see
+  `references/client-telemetry.md` before accepting any.
 - **Deviations are recorded.** A platform that can only scrape (a Prometheus
   `/metrics` endpoint) or can only collect stdout gets that written down in the
   repo's `AGENTS.md`, with what it would take to move to OTLP. A product built
