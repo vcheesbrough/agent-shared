@@ -55,6 +55,18 @@ it.** Production and dev are separate deployments of it, on separate hostnames,
 with separate configuration. One implementation to write, one to operate, one
 edge route to rate-limit.
 
+**The ingest service and its collector are one unit, deployed per
+environment.** The service is the first thing to read the request after the
+edge proxy; the collector behind it is reachable from nothing else.
+
+```
+client ──► Traefik ──► ingest service ──► collector ──► Tempo / Loki
+           TLS          validates token   internal,
+           rate limit   stamps identity   unreachable
+           body cap     bounds, clamps    from outside
+                        └──── one pair, per environment ────┘
+```
+
 **The environment stays structural.** `deployment.environment` is stamped by
 the deployment that answered, from its own config, and no request can change
 it: a dev client cannot land in production, because production is a different
@@ -90,16 +102,19 @@ measure, not a security one, and should be argued for on those terms.
 ### Stopping it
 
 There is no kill switch and no per-service disable. **The remedy is stopping
-the ingest deployment** — one container, one environment, every client of every
-service refused at once. It works because clients tolerate an unreachable
-endpoint by design (*What the client must do*): they drop their events and
-carry on, and no product is affected by the absence.
+the pair** — the environment's ingest service and its collector — and every
+client of every service in that environment is refused at once. It works
+because clients tolerate an unreachable endpoint by design (*What the client
+must do*): they drop their events and carry on, and no product is affected by
+the absence.
 
 It is all-or-nothing within an environment, so a runaway build in one product
-silences telemetry for the others until it is dealt with. With one shared
-endpoint and an edge rate limit already bounding the volume, that is the trade
-taken — a switch that exists in config is a thing to build, test and remember,
-and `docker stop` is none of those.
+silences client telemetry for the others until it is dealt with. Server-side
+telemetry is untouched — services export to their own collector on a path that
+has nothing to do with this one — so what is lost is client spans, not
+visibility. With the edge rate limit already bounding volume, that is the trade
+taken: a switch that lives in config is a thing to build, test and remember,
+and stopping a container is none of those.
 
 **The app's telemetry configuration and the endpoint's availability can
 disagree**, and nothing needs to reconcile them: the app tells its clients
@@ -358,11 +373,11 @@ Two consequences of trusting the rest, worth stating once:
 - **Public ingest lets someone else spend your storage and egress.** The edge
   rate limit bounds it; **alert on ingest volume itself**, not only on product
   metrics, so that an unexpected rise is noticed rather than billed.
-- **Stopping the ingest deployment is the emergency stop** (*Stopping it*).
+- **Stopping the environment's pair is the emergency stop** (*Stopping it*).
   There is nothing else to reach for, and nothing else to keep working.
-- **An environment without the ingest deployment has no client telemetry**, and
-  its apps hand out no telemetry configuration, so a new environment never
-  starts accepting volume nobody has looked at.
+- **An environment without the pair has no client telemetry**, and its apps
+  hand out no telemetry configuration, so a new environment never starts
+  accepting volume nobody has looked at.
 - **Never in the deploy health gate.** An ingest failure must not fail a
   product deploy.
 
