@@ -145,13 +145,48 @@ Two forms are acceptable:
 - **A session cookie representing an OIDC session**, for same-origin ingest on
   the product's own hostname. Acceptable because the session was established by
   OIDC login and the ingest route re-checks it exactly as every other
-  authenticated route does — including the scope or entitlement, not merely
-  "is logged in". It keeps the access token out of JavaScript, which is why
-  it's the better browser option.
+  authenticated route does — including the same telemetry permission, not
+  merely "is logged in" (below). It keeps the access token out of JavaScript,
+  which is why it's the better browser option.
 
 **Validate audience, not just signature.** A token the provider minted for a
 different client is a valid token; accepting it makes the ingest endpoint a
 confused deputy for every application in the estate.
+
+### The telemetry permission
+
+Require a dedicated scope — `telemetry:write` — and check it. Be clear about
+what it buys, because the obvious reason is the wrong one.
+
+**It is not what keeps other applications out.** The audience check does that,
+with or without a scope. A scope that every user of the application always
+holds is a constant, and a check against a constant is ceremony.
+
+**It earns its place when it can be absent.** A separate permission is what
+lets ingest be withdrawn from one user or group without touching their access
+to the product — a privacy opt-out enforced by the provider instead of by
+trusting the client to stop sending, or a way to cut off one abusive account
+without a deploy. Confirm your provider can actually withhold a scope per user
+or group before designing on it: many grant scopes per client registration, and
+such a scope only tells you which client asked, which the audience already
+said.
+
+**Both authentication forms answer the same question.** The decision is *may
+this identity write telemetry for this service* — read from the token's scope
+on the bearer path, and from the session's entitlement on the cookie path,
+where there is no token to carry a scope. Those two must consult the same rule.
+If they do not, the browser and the mobile client are governed by different
+policies, and that surfaces during an incident.
+
+**Name the capability, not the protocol.** `telemetry:write`, not
+`otlp:write` — the permission should survive a change of wire format, and the
+day a second ingest path exists, one permission should not have two names.
+
+**Refusal is loud at the endpoint and quiet at the client.** Answer `403`,
+distinct from an authentication failure, and count it: a client build that
+forgets to request the scope otherwise loses telemetry in silence, and nobody
+finds out until they need a trace. The client treats it as permanent and stops,
+like any other non-retryable answer.
 
 ### What you validate, and what you rely on
 
