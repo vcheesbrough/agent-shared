@@ -153,6 +153,29 @@ Two forms are acceptable:
 different client is a valid token; accepting it makes the ingest endpoint a
 confused deputy for every application in the estate.
 
+### What you validate, and what you rely on
+
+**Token claims are the identity provider's statements, not the client's.** The
+client chooses which token to present; it does not choose what is inside one.
+So the checks are a closed list — signature against the issuer's JWKS, issuer,
+audience, expiry, scope — and once those pass, the claims are *relied on*.
+Do not attempt to police the values of `sub`, `azp` or anything else: there is
+nothing to check them against, and an endpoint that re-derives what the
+provider has already asserted is doing the provider's job, worse.
+
+The residual risk is not a lying claim. It is an issuance question — which
+clients the provider will mint tokens for, under which flows, with what
+lifetime — and it is settled in the provider's configuration, not at the ingest
+endpoint.
+
+Three kinds of input arrive, and only one of them is hostile:
+
+| Source | Treatment |
+| --- | --- |
+| Signed by the provider — identity, audience, scope | Validated once against the closed list, then relied on |
+| Chosen by the caller — the route, and which token to send | Bounded by routing and the audience check; what remains is data quality, not security |
+| The request body — everything OTLP carries | Unsigned: overwritten, bounded or dropped |
+
 **Tokens expire, and the exporter must notice.** Let the client's existing OIDC
 stack refresh, and make sure the OTLP exporter reads the current token **per
 request** rather than binding a header once at initialisation — several SDKs
@@ -258,6 +281,9 @@ All of these are mandatory on a public path.
 - **Timeouts**, and no keeping slow uploads alive.
 
 ## Treat the payload as hostile
+
+Everything here concerns the **request body** — the unsigned part, which the
+client composes freely. The token was settled above and is not revisited.
 
 - **Overwrite, do not trust.** `service.name` and `deployment.environment` are
   stamped by the receiving deployment from its own config, and the user or
