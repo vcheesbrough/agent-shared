@@ -43,87 +43,94 @@ loopback or a private network, no published ports, no Docker socket, config the
 app cannot rewrite, memory-limited, and never in a health gate
 (`../SKILL.md` §6).
 
-## One endpoint per service, per environment
+## One endpoint per environment
 
-**Every service exposes its own ingest endpoint, and so does every environment
-of it** — by default a sub-path on the same domain that service's own APIs are
-served from, so the production deployment and the dev deployment each own a
-different one.
+**Every environment has exactly one ingest endpoint, shared by every service in
+it.** Production and dev are separate deployments of it, on separate hostnames,
+with separate configuration. One implementation to write, one to operate, one
+place where quotas and caps live.
 
-**The reason is provenance.** `service.name` and `deployment.environment`
-decide which dashboards, alerts and investigations a span belongs to, and the
-client is the one party that cannot be trusted to state them. Were every
-product's clients posting to one shared ingest, the only things left to tell
-them apart would be the payload — the untrusted part — or a token claim that
-the ingest service then has to map back to a service it knows nothing about.
-With a per-service endpoint, **the deployment that received the request already
-knows the answer**: it stamps `service.name` and `deployment.environment` from
-its own config, the same values its own server-side telemetry carries. A dev
-client's spans cannot arrive labelled `prod`, because they arrive at a
-different deployment.
+**The environment stays structural.** `deployment.environment` is stamped by
+the deployment that answered, from its own config, and no request can change
+it: a dev client cannot land in production, because production is a different
+deployment at a different address. That is the boundary this design keeps, and
+it is the one that matters most — dev data in production dashboards is the
+failure that wastes an incident.
 
-Two more things fall out of it:
+**`service.name` is no longer free, so derive it rather than believe it.** In
+descending order of trust:
 
-- **The sub-path separates the client kinds** — one route for the browser, one
-  for the mobile client — but separating is not proving. The route is chosen by
-  the caller, and nothing stops a script from posting to the mobile one. Bind
-  the claim to something the caller does not choose alone, and treat what
-  remains as best effort.
-- **One deployment serves the app, its telemetry configuration and its ingest
-  path**, so all three agree by construction, and they can be turned off
-  together.
+1. **From the token's client registration.** Each application already needs its
+   own OIDC client — the browser and the mobile client of one product need
+   separate ones — so the token's audience or authorised-party claim identifies
+   the application, and the identity provider attested it. The ingest service
+   keeps one mapping from client id to `service.name` and stamps from that. It
+   costs a table, and it is provider-attested rather than client-asserted.
+2. **From the payload, checked against that mapping.** Where the payload
+   disagrees with what the token implies, the token wins and the disagreement
+   is counted — it is a client bug more often than an attack, and a counter
+   that never moves is cheap.
+3. **From the payload alone**, where a service has no distinct registration.
+   This is trust, plainly, and worth knowing as such.
+
+A service that is not in the mapping is rejected, not admitted under whatever
+name it offered. New products are added to it deliberately, which is also the
+moment someone decides their quota.
 
 ### What the endpoint can actually prove
 
 The distinction matters the moment a number on a dashboard is challenged.
 
-- **Structural — the caller cannot lie.** Which service, and which
-  environment. No request can make the v-note production deployment stamp
-  `bored`, or `dev`: those values come from the config of the process that
-  answered, and reaching a different one means reaching a different deployment.
-  This is the boundary worth designing around, and a per-service endpoint is
-  what makes it free.
-- **Corroborated — lying is possible, but it costs something.** The client
-  kind. Give each kind its own OIDC client registration so the browser and the
-  mobile app present tokens with different audiences, and **reject a request
-  whose route disagrees with its token's audience**. A determined user can
-  still run a public client's flow and obtain the other kind's token, so this
-  is a barrier, not a proof; cookie-versus-bearer and the `Origin` header
-  corroborate without proving either. Where the difference genuinely matters —
-  abuse, fraud, a paid tier — device attestation is the only mechanism that
-  actually proves it, and it earns its weight only there.
+- **Structural — the caller cannot lie.** The environment. Those values come
+  from the config of the process that answered, and reaching a different one
+  means reaching a different deployment.
+- **Corroborated — lying is possible, but it costs something.** The service,
+  and the client kind, both derived from the token's client registration rather
+  than from the payload. A determined user can still run a public client's flow
+  and obtain another registration's token, so this is a barrier, not a proof;
+  the `Origin` header corroborates without proving. Where the difference
+  genuinely matters — abuse, fraud, a paid tier — device attestation is the
+  only mechanism that actually proves it, and it earns its weight only there.
 - **Asserted — the client says so, and that is all.** Its build version,
   platform, OS, locale, device class. There is no request-side derivation for
   any of them.
 
-**Then ask what a lie would buy.** Within one service, a user who mislabels
-their own client kind pollutes that service's platform breakdown using their
-own quota, under their own identity, in their own data. They cannot attribute
-it to another product, another environment or another user. That containment is
-what the per-service endpoint buys; everything finer is a data-quality measure,
-not a security one, and should be argued for on those terms.
+**Then ask what a lie would buy.** A user who mislabels their own client kind,
+or borrows another product's registration, pollutes a dashboard using their own
+quota, under their own identity, within one environment. They cannot reach
+another environment, another user's data, or anything the product itself
+protects. That containment is what one-endpoint-per-environment still buys;
+everything finer is a data-quality measure, not a security one, and should be
+argued for on those terms.
 
-Same-domain also happens to be what makes the browser case work: the session
-cookie is already there, there is no CORS preflight, no access token in
-JavaScript, and first-party paths largely escape ad-blocker filter lists.
-Provenance and authentication point the same way, which is a good sign about
-both.
+### What the shared endpoint has to carry
 
-**If ingest has to live on another host** — telemetry volume threatening the
-product's own capacity is the usual reason — the rule does not relax. The route
-still identifies exactly one service and one environment, and identity is still
-derived from the route and the token's audience rather than from the payload.
-What is given up is same-origin: CORS preflight, an access token in the
-browser, ad-blocker exposure and a second auth implementation. Take it for the
-volume argument, not for tidiness. Such a service carries the same five
-capabilities the app would; a collector with an auth extension is not one of
-them unless the missing four are supplied in front of it, and per-user quota is
-the one to check first.
+Two properties came free when each service owned its ingest, and now have to be
+built:
 
-**The cost is N endpoints, and that is the right cost to pay.** Share the
-implementation — the ingest handler belongs in whatever module or template new
-products start from — but never share the endpoint. Duplicated code is cheaper
-than an ingest service that has to be told, by something, who everyone is.
+- **Per-service quota, rate limit and kill switch.** Previously a service's
+  ingest could be capped or turned off by its own deployment. Now they are
+  configuration in the shared service, keyed by the service the token resolves
+  to, and one product's runaway client build must not be able to spend
+  another's budget.
+- **Agreement between telemetry configuration and ingest.** The app tells its
+  clients where to send and whether to send; the shared endpoint decides
+  whether it will accept. When those disagree, clients send to a door that
+  answers `403` — which they handle correctly, and which shows up on the
+  rejection counter, so the disagreement is visible rather than silent.
+
+**Same-origin is what is given up**, and the browser pays for it: the session
+cookie no longer applies to a different host, so the browser needs an access
+token in JavaScript, with CORS preflight on every export and ad-blocker
+exposure on a non-first-party hostname. If that trade turns out badly, the
+cheapest repair is a thin same-origin route on each app that authenticates with
+the cookie and forwards to the shared endpoint — a few lines per product, and
+it restores cookie auth and same-origin without giving up the single ingest
+deployment.
+
+The shared endpoint carries the five capabilities of *The invariant*; a
+collector with an auth extension is not one of them unless the missing four are
+supplied in front of it, and per-user quota is the one to check first.
 
 ## Authentication
 
@@ -142,12 +149,13 @@ Two forms are acceptable:
   a different origin. The endpoint validates it as it would any other API call:
   signature against the issuer's JWKS, issuer, **audience**, expiry, and a
   narrow scope such as `telemetry:write`.
-- **A session cookie representing an OIDC session**, for same-origin ingest on
-  the product's own hostname. Acceptable because the session was established by
-  OIDC login and the ingest route re-checks it exactly as every other
-  authenticated route does — including the same telemetry permission, not
+- **A session cookie representing an OIDC session** — available only where
+  ingest is same-origin with the app, so under the shared endpoint it applies
+  only behind a thin per-app forwarding route. Acceptable because the session
+  was established by OIDC login and that route re-checks it exactly as every
+  other authenticated route does — including the same telemetry permission, not
   merely "is logged in" (below). It keeps the access token out of JavaScript,
-  which is why it's the better browser option.
+  which is why it remains the better browser option where it is available.
 
 **Validate audience, not just signature.** A token the provider minted for a
 different client is a valid token; accepting it makes the ingest endpoint a
@@ -320,9 +328,10 @@ All of these are mandatory on a public path.
 Everything here concerns the **request body** — the unsigned part, which the
 client composes freely. The token was settled above and is not revisited.
 
-- **Overwrite, do not trust.** `service.name` and `deployment.environment` are
-  stamped by the receiving deployment from its own config, and the user and
-  session identity from the authenticated context (named below). Whatever the client claimed
+- **Overwrite, do not trust.** `deployment.environment` is stamped by the
+  receiving deployment from its own config, `service.name` from the token's
+  client registration, and the user and session identity from the authenticated
+  context (named below). Whatever the client claimed
   is discarded, not merged. The client kind comes from the route, checked
   against the token's audience and recorded as corroborated rather than proven.
 - **`service.version` on a client span is the client's build, not the
