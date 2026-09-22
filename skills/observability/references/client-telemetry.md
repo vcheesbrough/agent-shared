@@ -43,22 +43,55 @@ loopback or a private network, no published ports, no Docker socket, config the
 app cannot rewrite, memory-limited, and never in a health gate
 (`../SKILL.md` §6).
 
-## Two topologies
+## One endpoint per service, per environment
 
-**Same-origin, through the app** — the default. The ingest route lives on the
-product's own hostname, so the browser authenticates with the session cookie it
-already has, there is no CORS preflight, no access token in JavaScript, and
-first-party paths largely escape ad-blocker filter lists. One public surface,
-one auth implementation, and the endpoint can stamp trusted attributes because
-it already knows the user.
+**Every service exposes its own ingest endpoint, and so does every environment
+of it** — by default a sub-path on the same domain that service's own APIs are
+served from, so the production deployment and the dev deployment each own a
+different one.
 
-**A dedicated ingest service** on its own hostname — when telemetry volume
-would threaten the product's own capacity, or when several products share one
-ingest. It costs CORS, a token in the browser, ad-blocker exposure and a second
-auth implementation, so take it for the volume argument, not for tidiness. It
-carries the same five capabilities as the app would; a collector with an auth
-extension is not one of these unless the missing four are supplied in front of
-it, and per-user quota is the one to check first.
+**The reason is provenance.** `service.name` and `deployment.environment`
+decide which dashboards, alerts and investigations a span belongs to, and the
+client is the one party that cannot be trusted to state them. Were every
+product's clients posting to one shared ingest, the only things left to tell
+them apart would be the payload — the untrusted part — or a token claim that
+the ingest service then has to map back to a service it knows nothing about.
+With a per-service endpoint, **the deployment that received the request already
+knows the answer**: it stamps the same `service.name`,
+`deployment.environment` and `service.version` that its own server-side
+telemetry carries, read from its own config. A dev client's spans cannot arrive
+labelled `prod`, because they arrive at a different deployment.
+
+Two more things fall out of it:
+
+- **The sub-path carries the client kind.** Separate routes for the browser and
+  the mobile client are what make `<app>-spa` and `<app>-android` trustworthy —
+  again without reading anything the client sent.
+- **One deployment serves the app, its telemetry configuration and its ingest
+  path**, so all three agree by construction, and they can be turned off
+  together.
+
+Same-domain also happens to be what makes the browser case work: the session
+cookie is already there, there is no CORS preflight, no access token in
+JavaScript, and first-party paths largely escape ad-blocker filter lists.
+Provenance and authentication point the same way, which is a good sign about
+both.
+
+**If ingest has to live on another host** — telemetry volume threatening the
+product's own capacity is the usual reason — the rule does not relax. The route
+still identifies exactly one service and one environment, and identity is still
+derived from the route and the token's audience rather than from the payload.
+What is given up is same-origin: CORS preflight, an access token in the
+browser, ad-blocker exposure and a second auth implementation. Take it for the
+volume argument, not for tidiness. Such a service carries the same five
+capabilities the app would; a collector with an auth extension is not one of
+them unless the missing four are supplied in front of it, and per-user quota is
+the one to check first.
+
+**The cost is N endpoints, and that is the right cost to pay.** Share the
+implementation — the ingest handler belongs in whatever module or template new
+products start from — but never share the endpoint. Duplicated code is cheaper
+than an ingest service that has to be told, by something, who everyone is.
 
 ## Authentication
 
@@ -194,9 +227,17 @@ All of these are mandatory on a public path.
 
 ## Treat the payload as hostile
 
-- **Overwrite, do not trust.** `service.name`, `deployment.environment` and the
-  user or session identity are stamped server-side from the authenticated
-  context. Whatever the client claimed is discarded.
+- **Overwrite, do not trust.** `service.name`, `deployment.environment` and
+  `service.version` are stamped by the receiving deployment from its own
+  config — the same values its server-side telemetry carries — and the client
+  kind comes from the route it arrived on. The user or session identity comes
+  from the authenticated context. Whatever the client claimed is discarded,
+  not merged.
+- **What only the client knows stays client-asserted.** Its own build version,
+  platform, OS, locale and device class cannot be derived from the request, so
+  keep them, bound them to an expected shape, and treat them as assertion
+  rather than fact. Nothing that must be true — routing, tenancy, retention,
+  quota — may depend on them.
 - **Bound attribute count and value length**; drop what exceeds them.
 - **Mark client-origin spans** (`telemetry.source=client`). Trace ids are
   chosen by the client, and a user trivially knows their own, so spans can be

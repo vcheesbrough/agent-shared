@@ -106,8 +106,11 @@ decision that gets recorded; it is not the same as not having thought about it.
   claims about identity** — and only then re-emits into a collector that stays
   unreachable. A collector binary supplies none of those five, so it never
   faces a client directly; it sits behind something that does, whether that is
-  the product itself or a service written for the job. Client telemetry is
-  user-controlled input and is handled as such: see
+  the product itself or a service written for the job. **The endpoint is per
+  service and per environment**, by default a sub-path on that service's own
+  domain: the deployment that receives a span is what makes its `service.name`
+  and `deployment.environment` trustworthy, because the client cannot be.
+  Client telemetry is user-controlled input and is handled as such: see
   `references/client-telemetry.md` before accepting any.
 - **Deviations are recorded.** A platform that can only scrape (a Prometheus
   `/metrics` endpoint) or can only collect stdout gets that written down in the
