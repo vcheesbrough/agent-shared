@@ -256,6 +256,15 @@ callers apart, because anything that did would be a second identity system,
 weaker than the one the product already has. It also removes the separate
 limits, separate retention and separate attack surface such a route would need.
 
+**A service account is a legitimate client, until its credential is
+distributed.** A headless caller — end-to-end tests exercising this path, a
+load test, an appliance you operate — authenticates as a machine identity from
+the provider, which is a user like any other and carries both mandatory claims;
+its telemetry is then honestly attributed to it. What is not allowed is
+shipping that credential inside a released client, where it is a shared secret
+in every user's hands — the ingest key this section excludes, in OIDC dress —
+and where it collapses every device onto one identity.
+
 **Pre-authentication telemetry is emitted locally instead.** Crashes during
 startup, failed logins and broken OIDC redirects happen when there is no
 identity to send under, and they are still worth recording — so the client
@@ -492,10 +501,12 @@ Stamped alongside them:
   investigations actually group by, and unlike the identity attributes it is
   meaningful without naming anyone.
 
-**One helper, used everywhere.** The ingest endpoint and the product's own
-server-side request spans stamp the same attributes from the same claims.
-Otherwise one person is two identities, and a client span cannot be joined to
-the server work it caused — which was the point of collecting it.
+**One helper, and one provider.** The ingest endpoint and the product's own
+server-side request spans stamp the same attributes from the same claims —
+and validate against the *same* provider, because `sub` is typically derived
+per provider, so the same person authenticating through two of them arrives as
+two identities. Either mistake breaks the join between a client span and the
+server work it caused, which was the point of collecting it.
 
 **The client sets none of them.** The endpoint stamps from the authenticated
 context and discards whatever arrived.
