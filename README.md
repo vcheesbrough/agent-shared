@@ -16,7 +16,8 @@ agent-shared/
 │   ├── pr-review-loop/       # self-review a PR, then resolve threads
 │   ├── ci-watch/            # monitor CI to completion, reproduce failures
 │   ├── start-iteration/     # start a bored card as a numbered iteration
-│   └── api-versioning/      # design knowledge: remote API version contract
+│   ├── api-versioning/      # design knowledge: remote API version contract
+│   └── observability/       # design knowledge: OTLP telemetry + the MVP bar
 ├── agents/                  # subagent definitions (Claude Code only)
 │   ├── pr-self-review.md    # reviews a PR diff in a clean context
 │   └── ci-diagnose.md       # reads failed CI logs, returns a short diagnosis
@@ -43,15 +44,16 @@ via symlinks on this machine:
 Edit the files in this repo; the symlinks pick up changes automatically.
 Every skill under `skills/` gets the same pair of symlinks
 (`~/.claude/skills/<name>` and `~/.agents/skills/<name>`) — currently
-`pr-review-loop`, `ci-watch`, `start-iteration`, and `api-versioning`.
+`pr-review-loop`, `ci-watch`, `start-iteration`, `api-versioning`, and
+`observability`.
 
 ## Skills: procedures and design knowledge
 
 Skills here come in two kinds. **Procedure skills** (`start-iteration`,
 `ci-watch`, `pr-review-loop`) package a workflow the baseline mandates.
-**Topic skills** (`api-versioning`) record a design decision worked out in one
-repo so every other repo starts from it: the rule, why it holds, and when it
-does not apply.
+**Topic skills** (`api-versioning`, `observability`) record a design decision
+worked out in one repo so every other repo starts from it: the rule, why it
+holds, and when it does not apply.
 
 Design knowledge goes in a topic skill rather than in `global/AGENTS.md`
 because the baseline is loaded in full by every session in every repo, while a

@@ -79,7 +79,9 @@ iteration heading or semver coupling.
     not yet reached its MVP.
   - **MVP release:** when the MVP-completion card merges to trunk, set the
     workspace to `1.0.0` and tag it. Crossing to `1.0.0` **is** the MVP
-    milestone.
+    milestone. **Observability is part of that bar** — a product does not reach
+    `1.0.0` until it meets §1 of the `observability` skill (§10). Pre-MVP
+    iterations may leave parts of it unbuilt; the MVP-completion card may not.
   - **Post-MVP** (`1.x.x`): `1.N.P`, with `N` **continuing** from the last
     pre-MVP iteration. Any `1.x.x` release represents a post-MVP release.
   - **Patch `P`** resets to `0` at iteration start and bumps only on the active
@@ -266,3 +268,8 @@ repo's own `AGENTS.md` may override.
 - **`api-versioning`** — any remote API whose clients deploy separately from
   the server: version negotiation, how the server must behave, the
   shim-over-shared-implementation structure, and what forces a new version.
+- **`observability`** — what a product must emit to be operable, why every
+  signal leaves over OTLP to one collector, the telemetry-module structure, and
+  the cardinality rules. Observability is part of the MVP bar (§2), so load it
+  before designing telemetry, adding a metric/span/log field/dashboard/alert,
+  or taking a product to `1.0.0`.
