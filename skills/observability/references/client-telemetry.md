@@ -387,6 +387,29 @@ behind whatever the telemetry module already centralises.
   spans, logs and events belongs to. It is the attribute designed for this
   case, and it is what most client-side investigations actually group by.
 
+### What the endpoint can stamp, and what it should
+
+It holds the token's `sub` always; it holds a name, an email or a set of roles
+only when those claims were granted and stored. Possible and advisable are
+different questions:
+
+| Attribute | Can it? | Should it? |
+| --- | --- | --- |
+| `user.hash` | Yes, computed | This is the `user.*` pseudonym. Pick it **or** `enduser.pseudo.id` — emitting both doubles the identity surface for nothing |
+| `user.id` | Yes, from `sub` | Only where telemetry has to join to product data: `sub` names the person to anyone holding both trace access and provider access |
+| `user.roles` | If the token carries groups | Optional and genuinely useful — bounded, and it answers "who hits this path". In a small tenant a role still names a person |
+| `user.name`, `user.email`, `user.full_name` | If the profile was stored | No. Direct PII in a store with different access control from the product's own. Look the person up from the identifier instead |
+
+**Stamp the minimum that answers a question actually asked.** Each further
+identity attribute is another copy of personal data in a store that is not
+backed up, not access-controlled per user, and readable by everyone with
+Grafana.
+
+**One derivation, used everywhere.** The pseudonym the ingest endpoint stamps
+must be the one the product's own server-side request spans stamp — same input,
+same key, same environment. Otherwise one person is two identities, and a
+client span cannot be joined to the server work it caused, which was the point.
+
 The client sets none of these. The endpoint stamps them from the authenticated
 context and discards whatever arrived. Keep the pseudonym's key somewhere the
 telemetry store cannot reach, so that access to traces is not access to
