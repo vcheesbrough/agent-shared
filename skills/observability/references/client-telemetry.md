@@ -385,12 +385,23 @@ below, and that price is not optional.
 refusing it is telemetry that cannot be attributed to anyone. The whole OTLP
 request is refused — not a filtered part of it — and three things happen:
 
-- **The client is told.** `403`, distinct from an authentication failure, so
-  the client treats it as permanent and stops for the session instead of
-  retrying a batch that can never succeed (*What the client must do*). The
-  response names the missing claim and nothing else: this is a configuration
-  fault, and naming it is the difference between a five-minute fix and an
-  afternoon.
+- **The client is told.** `403`, so the client treats it as permanent and stops
+  for the session instead of retrying a batch that can never succeed (*What the
+  client must do*). The response names the missing claim and nothing else: this
+  is a configuration fault, and naming it is the difference between a
+  five-minute fix and an afternoon.
+
+  **`403`, not `400` or `401`.** `400` is what a malformed payload returns, and
+  sharing a code would make "your protobuf is wrong" indistinguishable from
+  "your token is incomplete" — different fix, different system, different
+  owner. `401` invites the client to refresh and retry, which against a
+  provider that is not emitting the claim yields an identical token and loops.
+  It is also the mapping RFC 6750 gives: `invalid_request` → 400,
+  `invalid_token` → 401, `insufficient_scope` → 403, and a valid token that
+  does not carry enough to proceed is the third. The missing
+  `telemetry:write` permission answers the same way, so both
+  "authenticated but not enough" refusals behave identically and differ only
+  in the reason recorded against the counter.
 - **The server warns.** A warning, not an error — nothing is broken for the
   user and nobody should be woken — carrying the missing claim, the route, and
   the token's client id, which is what identifies the misconfigured
