@@ -222,11 +222,13 @@ policies, and that surfaces during an incident.
 `otlp:write` — the permission should survive a change of wire format, and the
 day a second ingest path exists, one permission should not have two names.
 
-**Refusal is loud at the endpoint and quiet at the client.** Answer `403`,
-distinct from an authentication failure, and count it: a client build that
+**Refusal is loud at the endpoint and quiet at the client.** Answer `401` with
+a body naming the missing scope, and count it by reason: a client build that
 forgets to request the scope otherwise loses telemetry in silence, and nobody
-finds out until they need a trace. The client treats it as permanent and stops,
-like any other non-retryable answer.
+finds out until they need a trace. It shares its status code with a bad token
+on purpose (*Which attributes carry identity* has the reasoning); the body and
+the counter are what tell them apart. The client refreshes its token once, is
+refused again, and stops for the session.
 
 ### What you validate, and what you rely on
 
@@ -303,11 +305,17 @@ harder.
   attempts, after which it is dropped. Nothing is persisted to be re-sent on a
   later launch — stale telemetry is worth less than the storage and the
   ingestion-window trouble it causes.
-- **Retry only what is retryable.** `429` and `5xx` are worth backing off and
-  retrying, honouring `Retry-After`. `400`, `401`, `403` and `413` are
-  permanent answers for that payload: drop it. On `401`, stop exporting until
-  the token has been refreshed rather than looping on a token the endpoint has
-  already rejected.
+- **Retry only what is retryable.** OTLP names the retryable answers, and
+  they are the only ones: `429`, `502`, `503` and `504`, backed off and
+  retried honouring `Retry-After`. Every other `4xx` or `5xx` — `400`, `401`,
+  `403`, `413`, and `500` too — is permanent for that payload: drop it.
+  **`401` gets one refresh.**
+  Every refusal of the token — missing, invalid, expired, lacking the scope or
+  a required claim — is `401` (*Which attributes carry identity*), so the code
+  cannot tell an expired token from a misconfigured provider. Stop exporting
+  until the token has been refreshed, then resume; if the next batch is
+  refused too, stop for the session. A second `401` on a fresh token is not
+  going to change, and retrying it is the loop this rule exists to prevent.
 - **Never on the critical path.** Export happens off the UI thread and outside
   any interaction. The application behaves identically whether telemetry is
   working, failing, or switched off entirely.
@@ -370,8 +378,12 @@ All of these are mandatory on a public path.
   gzip, and a 1 MiB upload expands to far more. Cap both; reject with 413.
 - **Rate limit by source IP at the edge proxy.** No per-caller accounting
   inside the endpoint.
-- **Accept only what you use:** `POST`, the traces and logs paths,
-  `application/x-protobuf`. Everything else is rejected, not tolerated.
+- **Accept only what you use:** `POST`, the traces and logs paths, and OTLP's
+  two encodings, `application/x-protobuf` and `application/json`. Everything
+  else is rejected, not tolerated. A client sends whichever encoding is
+  cheaper for it to produce: JSON is what a JavaScript SDK sends and what a
+  hand-rolled browser client builds from a serialiser it already has;
+  protobuf is smaller on the wire and needs only a message-encoding library.
 - **Refuse OTLP metrics from clients.** Arbitrary metric names and labels
   arriving from the internet is unbounded cardinality with a stranger's hand on
   the dial — the one item here that can cost real money within an afternoon.
@@ -390,7 +402,7 @@ everything.
 The complete set of exceptions:
 
 - **Stamped by the endpoint, whatever the client sent.**
-  `deployment.environment` from the receiving deployment's own config, and the
+  `deployment.environment.name` from the receiving deployment's own config, and the
   user and session identity from the authenticated context (named below). What
   the client claimed is discarded, not merged.
 - **`service.name` is bounded**, not overwritten: taken from the client, and
@@ -399,8 +411,14 @@ The complete set of exceptions:
 - **`service.version` is the client's build, not the receiver's.** Do not stamp
   the receiving deployment's version onto a span that came from somewhere else;
   if the receiver's own version is useful, it goes in an attribute of its own.
-- **Client-origin spans are marked** (`telemetry.source=client`). Trace ids are
-  chosen by the client, and a user trivially knows their own, so spans can be
+- **Client-origin telemetry is marked** with the estate's path attribute,
+  `telemetry_source=client` — one key on every signal from every path, whose
+  value says how the data reached the store: `docker` and `file` set by the
+  platform on what it scrapes, `otlp` set by a server on its own push,
+  `client` set by the ingest on what comes through it, from the deployer's
+  static attribute map rather than a name baked into the ingest. It is a bare
+  key outside every semconv namespace (`../SKILL.md` §4). Trace ids are chosen
+  by the client, and a user trivially knows their own, so spans can be
   injected into a trace the server also writes to. Guessing a stranger's
   128-bit id is impractical; injecting into a known one is not. The marker is
   what lets a reader tell which spans the server vouches for.
@@ -410,6 +428,12 @@ The complete set of exceptions:
   silently drops exactly the offline data the buffering was built for.
 - **Attribute count and value length are capped**, and what exceeds them is
   dropped. A volume control, applied without reading anything.
+- **Whole items the endpoint drops are reported**, in OTLP's partial-success
+  response with the rejected count and a reason, so a client that is losing
+  spans can say so locally (*What the client must do*). Trimming attributes
+  inside an item is not a rejection and is not reported. An ingest built from
+  a collector cannot produce partial success for a drop in a later processor;
+  it records that as a deviation, with the counter that shows the drops.
 
 Two consequences of trusting the rest, worth stating once:
 
@@ -456,23 +480,40 @@ below, and that price is not optional.
 refusing it is telemetry that cannot be attributed to anyone. The whole OTLP
 request is refused — not a filtered part of it — and three things happen:
 
-- **The client is told.** `403`, so the client treats it as permanent and stops
-  for the session instead of retrying a batch that can never succeed (*What the
-  client must do*). The response names the missing claim and nothing else: this
-  is a configuration fault, and naming it is the difference between a
-  five-minute fix and an afternoon.
+- **The client is told.** `401`, with a body that names the missing claim and
+  nothing else: this is a configuration fault, and naming it is the difference
+  between a five-minute fix and an afternoon. The client refreshes its token
+  once and, when the refreshed token is refused too, stops for the session
+  instead of retrying a batch that can never succeed (*What the client must
+  do*).
 
-  **`403`, not `400` or `401`.** `400` is what a malformed payload returns, and
-  sharing a code would make "your protobuf is wrong" indistinguishable from
-  "your token is incomplete" — different fix, different system, different
-  owner. `401` invites the client to refresh and retry, which against a
-  provider that is not emitting the claim yields an identical token and loops.
-  It is also the mapping RFC 6750 gives: `invalid_request` → 400,
-  `invalid_token` → 401, `insufficient_scope` → 403, and a valid token that
-  does not carry enough to proceed is the third. The missing
-  `telemetry:write` permission answers the same way, so both
+  **`401`, the same as every other refusal of the token.** RFC 6750 maps this
+  finer — `invalid_token` → 401, `insufficient_scope` → 403 — and that mapping
+  is deliberately not used. The reference ingest endpoint is a collector
+  distribution, where the authenticator never chooses a status: the interceptor
+  answers `401` with the error text as the body, and the receiver's one
+  override is reserved for "not ready", answered `503` so clients back off. An
+  ingest written into the product could answer `403`, and must not — clients
+  have one rule for every refusal of a token, whatever is listening. So the
+  status code is uniform, and the distinctions it would have carried live
+  where they can:
+
+  - **Which rule failed is in the body.** `no token`, `invalid token` with the
+    reason, `missing scope: telemetry:write`, `missing claim:
+    preferred_username`. "Your token is bad" and "your token is incomplete"
+    are still different fixes for different owners, told apart by reading one
+    response instead of one status line.
+  - **A malformed payload is still `400`.** That refusal comes from the
+    receiver, after authentication has passed, so "your protobuf is wrong"
+    keeps its own code.
+  - **The loop is bounded at the client, not by the code.** `401` invites a
+    refresh and retry, and against a provider that is not emitting the claim
+    the refreshed token is identical. One refresh is therefore the budget: a
+    second `401` in a row is permanent for the session.
+
+  The missing `telemetry:write` permission answers the same way, so both
   "authenticated but not enough" refusals behave identically and differ only
-  in the reason recorded against the counter.
+  in the body and the reason recorded against the counter.
 - **The server warns.** A warning, not an error — nothing is broken for the
   user and nobody should be woken — carrying the missing claim, the route, and
   the token's client id, which is what identifies the misconfigured

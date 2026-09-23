@@ -19,7 +19,7 @@ or rule file to the platform's config when a labelling contract can carry it.
   environment deploy. Otherwise a feature branch, or a rollback to an older
   release, silently overwrites the shared dashboard.
 - **One dashboard for every environment**, filtered by a template variable over
-  `deployment.environment`. Two near-identical dashboards diverge within a
+  `deployment.environment.name`. Two near-identical dashboards diverge within a
   month.
 - **Give each dashboard a stable uid** and set the publish message to the
   release and commit, so the backend's version history traces back to a source
@@ -54,6 +54,13 @@ for the person who has already decided something is wrong.
   false positive looks like. An alert with no runbook is a page with no plan.
 - **Every alert has an owner and an urgency.** If nobody would get out of bed
   for it, it is not a page.
+- **A pushing process that dies goes quiet.** Nothing scrapes it, so nothing
+  reports it down. Every product carries one absence alert per environment on
+  its build-info gauge, which fires for a dead process, a broken export path
+  and a deployment whose telemetry variables were left out alike; the health
+  check, kept separate for exactly this, says which. It is also what makes
+  "no variables, no telemetry" (`../SKILL.md` §2) safe as a default: the
+  silence is noticed.
 - **Telemetry's own failures are not product alerts.** A collector outage is
   the platform's alert, and the product's alerts should be written knowing they
   go blind during one — which is itself a reason not to build a deploy gate on

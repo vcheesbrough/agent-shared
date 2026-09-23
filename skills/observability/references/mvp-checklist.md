@@ -17,9 +17,9 @@ assertion that the code calls a tracing library.
 | 3. Spans at every entry point and process boundary | A trace of one real request, showing the edge span, the product's span and its database/HTTP children |
 | 4. Structured, correlated logs | A log line for that same request, found by its `trace_id` |
 | 5. RED + saturation | The dashboard panels, non-empty, under real traffic |
-| 6. Build info metric | A query joining a working metric to `<app>_build_info` |
-| 7. Dashboard and one symptom alert | The published dashboard uid; the alert rule and its runbook link |
-| 8. Telemetry optional, health separate | The no-collector test; the deploy gate's health check, with no telemetry dependency |
+| 6. Build info metric | A query joining a working metric to `<app>.build.info` (stored as `<app>_build_info`) |
+| 7. Dashboard, one symptom alert, the absence alert | The published dashboard uid; both alert rules and the symptom alert's runbook link |
+| 8. Telemetry optional, health separate | The no-collector and no-variables tests; the deploy gate's health check, with no telemetry dependency |
 
 Record the answers in the card or the repo's deploy doc. A gap that is
 deliberate is recorded with its reason and what would close it — the same rule
@@ -32,7 +32,7 @@ cheaper. Do not start with dashboards — a dashboard over uncorrelated signals
 is a picture of the problem.
 
 1. **Resource attributes and the telemetry module.** Create the module, set
-   `service.name` / `service.version` / `deployment.environment`, wire the OTLP
+   `service.name` / `service.version` / `deployment.environment.name`, wire the OTLP
    exporter and a bounded, flushing shutdown. Nothing else changes yet. From
    here, every later step lands already identified and already correlated.
 2. **Logs through the module.** Move existing logging onto the façade the
