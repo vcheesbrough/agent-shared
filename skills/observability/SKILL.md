@@ -1,6 +1,6 @@
 ---
 name: observability
-description: Observability contract for a product that runs somewhere you cannot attach a debugger - what a product must emit to be operable, why all three signals leave the process over OTLP to a collector that the product knows nothing behind, how the telemetry module is structured so exporter types never reach product code, and the cardinality rules that keep metrics affordable. Observability is part of the MVP bar, not a follow-up. Language- and backend-agnostic, with the Rust crate binding in references/rust.md. Load before designing a service's telemetry, choosing or upgrading telemetry crates, accepting OTLP from browser or mobile clients, adding or changing a metric, span, log field, dashboard or alert, taking a product to 1.0.0, or debugging why a deployed product cannot be diagnosed.
+description: Observability contract for products that run where you cannot attach a debugger - what to emit, OTLP egress, the telemetry module, cardinality, and the MVP bar. Load before designing or changing telemetry, choosing or upgrading telemetry crates, accepting OTLP from browser or mobile clients, adding a metric, span, log field, dashboard or alert, taking a product to 1.0.0, or debugging an undiagnosable deployment.
 ---
 
 # observability
@@ -21,8 +21,20 @@ all — is the platform's business and can be replaced without a product change.
 This is a design contract, not a library. It is stated in no language's or
 SDK's terms; apply it with whatever the repo uses. Where a language has a
 settled stack, a reference binds the contract to it and records where that
-stack falls short — `references/rust.md` for Rust. Where a repo's own
-`AGENTS.md` or README records a deliberate deviation, that record wins.
+stack falls short. Where a repo's own `AGENTS.md` or README records a
+deliberate deviation, that record wins.
+
+**Where to read.** This file is the contract for a server process. Load a
+reference only for the task it names:
+
+| Task | Read |
+| --- | --- |
+| Sending telemetry from a browser, phone or desktop client | `references/client-export.md` |
+| Building or operating the endpoint that accepts client telemetry | `references/client-ingest.md` |
+| A Rust product: crates, pinning, what the SDK reads, where it falls short | `references/rust.md` |
+| Wiring the variables through sovereign-config on this estate | `references/deployment.md` |
+| Adding or changing a dashboard or alert | `references/dashboards-and-alerts.md` |
+| Signing off `1.0.0`, or retrofitting an existing product | `references/mvp-checklist.md` |
 
 **Terms**
 
@@ -145,35 +157,10 @@ decision that gets recorded; it is not the same as not having thought about it.
   silent default safe in production is §1.7's absence alert: a deployment that
   should report and does not is noticed, whether it lost its variables or its
   process.
-- **Implementation note — recommended on this estate, not required by the
-  contract.** The variables live in sovereign-config, in **a layer of their
-  own** per product environment — `/<product>/devops/<env>/otel/`, holding the
-  `OTEL_*` leaves as direct children and nothing else — rendered as one more
-  layer on the deploy command the environment already uses:
-  `sovereign-config render /<product>/devops/<env>/compose
-  /<product>/devops/<env>/otel -- <deploy>`. Layers are read in order and
-  overlaid onto the deploy step's environment, and compose passes the names
-  into the service's `environment:` block; the compose file never holds a
-  value, so telemetry is retargeted by a write to the store, not a commit.
-  Keeping telemetry out of the compose layer means it is reviewed, listed and
-  revoked on its own, and has the same shape in every product. Two properties
-  of `render` shape the layer: only a layer's direct children become
-  variables, so nothing is nested beneath it; and a layer that contributes
-  nothing fails the deploy, so an environment without telemetry leaves the
-  layer off the render command rather than empty, and an environment that
-  keeps the layer but wants it silent stores `OTEL_SDK_DISABLED=true` in it. **A leaf that states the same fact as another leaf is
-  an alias of it**, not a copy: the upstream collector address is one stored
-  value under a shared path (`/observability/otlp-endpoint`, or wherever the
-  estate keeps platform-wide facts), and every product environment's
-  `OTEL_EXPORTER_OTLP_ENDPOINT` — the ingest pair's included — is
-  `alias_add`-ed from it, so moving the collector is one write that cannot
-  leave a product behind. Aliases rather than a shared layer, because a
-  product's render connection is confined to its own subtree and reaches the
-  shared value only through a path inside it. The same holds within a product:
-  `OTEL_SERVICE_NAME` is one fact across its environments.
-  `OTEL_RESOURCE_ATTRIBUTES` is the leaf that genuinely differs per
-  environment, because `deployment.environment.name` lives in it; it is stored per
-  environment and aliased nowhere.
+- **On this estate the variables arrive through sovereign-config**, in a layer
+  of their own per product environment, with facts shared across products
+  stored once and aliased: `references/deployment.md`. Recommended, not
+  required by the contract.
 - **The product knows nothing behind the collector.** It does not know which
   store receives a signal, nor the retention, nor whether the collector
   samples. Changing backends is a platform change with no product release.
@@ -184,19 +171,12 @@ decision that gets recorded; it is not the same as not having thought about it.
   phones and browsers has to accept it publicly. That path is a public API,
   with everything that implies, not an open collector port.
 - **Clients never terminate against a collector.** Client telemetry lands on
-  something that **authenticates the user through the product's OIDC provider
-  — never an API key or an ingest secret — rate-limits by source IP at the edge
-  proxy, caps the decompressed body, and overwrites what the payload
-  claims about identity** — and only then re-emits into a collector that stays
-  unreachable. A collector binary supplies none of those four, so it never
-  faces a client directly; it sits behind something that does, whether that is
-  the product itself or a service written for the job. **One ingest service and
-  its collector are deployed as a pair, per product per environment**, shared
-  by that product's services: the deployment that receives a span is what makes
-  the product and `deployment.environment.name` trustworthy, while `service.name` is
-  taken from the client and bounded to that product's known set.
-  Client telemetry is user-controlled input and is handled as such: see
-  `references/client-telemetry.md` before accepting any.
+  an ingest that authenticates the user through the product's OIDC provider,
+  is rate-limited and body-capped at the edge, overwrites what the payload
+  claims about identity, and only then re-emits into a collector nothing else
+  can reach — one ingest-and-collector pair per product environment. Client
+  telemetry is user-controlled input: `references/client-ingest.md` is the
+  contract for accepting it, `references/client-export.md` for sending it.
 - **Deviations are recorded.** A platform that can only scrape (a Prometheus
   `/metrics` endpoint) or can only collect stdout gets that written down in the
   repo's `AGENTS.md`, with what it would take to move to OTLP. A product built
@@ -339,12 +319,10 @@ product code ──► the language's logging / span / metric façade
 - **Never block a request on an export.** Bounded queues, background export,
   drop on backpressure, and a counter for what was dropped — telemetry that can
   exhaust memory under load is a self-inflicted incident.
-- **On a client, the same rule is stricter.** A client that cannot reach its
-  ingest endpoint drops the events and carries on — bounded buffer, backoff
-  with jitter, retries confined to the session, nothing on the critical path,
-  nothing the user ever sees. And a client with no telemetry configuration does
-  not start telemetry at all: absent configuration is disabled
-  (`references/client-telemetry.md`).
+- **On a client, the same rule is stricter**: drop and carry on, bounded
+  buffer, retries confined to the session, nothing the user ever sees, and no
+  telemetry at all without configuration from the product
+  (`references/client-export.md`).
 - **Never in the health gate.** Readiness and liveness checks, deploy smoke
   tests and CI gates do not depend on telemetry reaching anything.
 - **No secrets, credentials, tokens or payloads.** Not in span attributes, not

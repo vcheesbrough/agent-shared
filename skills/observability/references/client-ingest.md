@@ -1,7 +1,9 @@
-# Client telemetry: OTLP from browsers and mobile apps
+# Client telemetry: accepting OTLP from browsers and mobile apps
 
 Companion to `../SKILL.md` §2. Read it before accepting telemetry from anything
 running on a user's device — a browser SPA, a mobile app, a desktop client.
+What the client itself must do — credentials, buffering, retry, configuration
+— is `client-export.md`; this file is the endpoint's side.
 
 Server telemetry comes from a process you deployed. Client telemetry comes from
 a device you do not control, sent by a build you cannot recall, across a
@@ -40,10 +42,10 @@ OTLP receiver facing users either way.
 **Rate limiting and the body cap are the edge proxy's job**, by source IP, and
 that is enough. Per-caller accounting inside the ingest service is not built:
 the edge already bounds the volume, and telemetry loss is tolerated by design —
-a client that gets throttled drops its events and carries on (*What the client
-must do*), so the known weakness of per-IP limiting, that a shared NAT is one
-caller, costs a crowd behind one address some spans rather than costing anyone
-correctness.
+a client that gets throttled drops its events and carries on
+(`client-export.md`), so the known weakness of per-IP limiting, that a shared
+NAT is one caller, costs a crowd behind one address some spans rather than
+costing anyone correctness.
 
 **A collector binary supplies none of the four.** Alloy and the OpenTelemetry
 Collector have no notion of a user, no request-level limit, and their failure
@@ -143,8 +145,8 @@ security one, and should be argued for on those terms.
 There is no kill switch and no per-service disable. **The remedy is stopping
 the pair** — that environment's ingest service and its collector — and every
 client of every service in it is refused at once. It works because clients
-tolerate an unreachable endpoint by design (*What the client must do*): they
-drop their events and carry on, and the product is not affected by the absence.
+tolerate an unreachable endpoint by design (`client-export.md`): they drop
+their events and carry on, and the product is not affected by the absence.
 
 It is all-or-nothing within one product's environment, and stops nothing
 elsewhere: other products keep ingesting, and that product's other environments
@@ -253,19 +255,14 @@ Three kinds of input arrive, and they are treated differently:
 | Chosen by the caller — the route, and which token to send | Bounded by routing and the audience check; what remains is data quality, not security |
 | The request body — everything OTLP carries | Trusted as sent, apart from the short list in *What the endpoint changes about the payload* |
 
-**Tokens expire, and the exporter must notice.** Let the client's existing OIDC
-stack refresh, and make sure the OTLP exporter reads the current token **per
-request** rather than binding a header once at initialisation — several SDKs
-do the latter by default. The failure is silent: an expired token gives a
-non-retryable 4xx, the batch is dropped, and the signal that would have told
-you is the one that just stopped.
-
 **There is no anonymous ingest.** Every accepted request carries an
 authenticated identity. The endpoint offers no unauthenticated route, no device
 id, no installation id and no ingest key — nothing that would tell unidentified
 callers apart, because anything that did would be a second identity system,
 weaker than the one the product already has. It also removes the separate
 limits, separate retention and separate attack surface such a route would need.
+What a client does with the events it cannot yet send under an identity is its
+side of the contract (`client-export.md`, *Presenting a credential*).
 
 **A service account is a legitimate client, until its credential is
 distributed.** A headless caller — end-to-end tests exercising this path, a
@@ -275,100 +272,6 @@ its telemetry is then honestly attributed to it. What is not allowed is
 shipping that credential inside a released client, where it is a shared secret
 in every user's hands — the ingest key this section excludes, in OIDC dress —
 and where it collapses every device onto one identity.
-
-**Pre-authentication telemetry is emitted locally instead.** Crashes during
-startup, failed logins and broken OIDC redirects happen when there is no
-identity to send under, and they are still worth recording — so the client
-writes them through the platform's own mechanism, the JavaScript console or the
-system log (*What the client must do*), and sends nothing.
-
-The cost, stated once and accepted: those events reach nobody unless someone
-can read that device's logs. Failures before a user is authenticated are
-visible in development and in a support conversation, not on a dashboard. That
-is the price of having no unauthenticated public surface at all.
-
-## What the client must do
-
-**Failing to reach the ingest endpoint is a normal condition, not an
-exceptional one.** Phones lose signal, browsers close mid-flush, captive
-portals intercept, blockers cancel the request, and ingest gets turned off
-between one launch and the next. The client treats all of it the same way:
-**drop the events and carry on.** Telemetry loss is never an error the user
-sees, never a crash, never a blocked interaction, and never a reason to try
-harder.
-
-- **Bounded buffer, oldest dropped first.** Cap it by count and by bytes. A
-  buffer that grows until the export succeeds is a memory leak on a device you
-  do not control and cannot debug.
-- **Retry within the session, never beyond it.** A batch may be retried later
-  in the same session, with exponential backoff and jitter and a cap on
-  attempts, after which it is dropped. Nothing is persisted to be re-sent on a
-  later launch — stale telemetry is worth less than the storage and the
-  ingestion-window trouble it causes.
-- **Retry only what is retryable.** OTLP names the retryable answers, and
-  they are the only ones: `429`, `502`, `503` and `504`, backed off and
-  retried honouring `Retry-After`. Every other `4xx` or `5xx` — `400`, `401`,
-  `403`, `413`, and `500` too — is permanent for that payload: drop it.
-  **`401` gets one refresh.**
-  Every refusal of the token — missing, invalid, expired, lacking the scope or
-  a required claim — is `401` (*Which attributes carry identity*), so the code
-  cannot tell an expired token from a misconfigured provider. Stop exporting
-  until the token has been refreshed, then resume; if the next batch is
-  refused too, stop for the session. A second `401` on a fresh token is not
-  going to change, and retrying it is the loop this rule exists to prevent.
-- **Never on the critical path.** Export happens off the UI thread and outside
-  any interaction. The application behaves identically whether telemetry is
-  working, failing, or switched off entirely.
-- **Assume you are a crowd.** When ingest fails, it usually fails for every
-  client at once, and they all retry together. Backoff with jitter, and give
-  up for the rest of the session after repeated failure — a client fleet
-  retrying in lockstep is a self-inflicted denial of service against the
-  product it is meant to be reporting on.
-- **Flush on the way out, best effort.** A page-hide beacon, a bounded flush
-  when a mobile app backgrounds — never delaying exit, never blocking the
-  close.
-- **Say so locally.** A failed export is the one failure that cannot report
-  itself: the channel that would have carried the news is the broken one. So
-  the client writes to whatever local mechanism the platform has — the
-  JavaScript console in a browser, the system log on Android or a desktop
-  client — at warning level. Never a dialog, a toast, or anything else a user
-  is made to read. Carry the status or error kind, the endpoint, and how many
-  events were dropped; never the token, and nothing personal.
-- **Log transitions, not batches.** The first failure, the return to working,
-  and the decision to give up for the session. A line per dropped batch floods
-  the very tool someone would use to debug the page, which makes the diagnostic
-  worse than silence. The same at startup: when no telemetry configuration
-  arrived and OTLP was therefore never initialised, say so once — that line is
-  the answer to "why are there no spans from this build".
-
-## Telemetry configuration comes from the product
-
-**The client has no default endpoint.** It receives its telemetry
-configuration from the product — whether ingest is enabled, where it goes, how
-much to sample — and **in the absence of that configuration it does not
-initialise OTLP at all.** No compiled-in fallback, no endpoint derived from the
-app's own origin, no localhost, no attempt to find out by trying.
-
-This is the client-side form of §2's rule for servers (one endpoint,
-configured, never compiled in) and of §5's rule that disabled is explicit: on a
-client, **absent configuration is disabled**, unambiguously.
-
-It is also what lets a deployment change its mind about clients it cannot
-recall. Where the endpoint moves, or an environment stops offering ingest, a
-configured client follows on its next launch; a client with the endpoint baked
-into its build keeps hammering the old address until an app-store release
-catches up with it.
-
-Three consequences to design for:
-
-- **Configuration arrives after startup.** Spans from the launch sequence — the
-  ones you most want — either wait in a small, bounded, short-lived buffer or
-  are discarded. If configuration never arrives, they are discarded. Never hold
-  them for the whole session in hope.
-- **A failed configuration fetch is absence, not an error.** No telemetry, no
-  aggressive retry, no message to the user.
-- **Configuration changes between launches**, in both directions. The client
-  honours the newest it has been given, including "off".
 
 ## Edge controls
 
@@ -380,10 +283,8 @@ All of these are mandatory on a public path.
   inside the endpoint.
 - **Accept only what you use:** `POST`, the traces and logs paths, and OTLP's
   two encodings, `application/x-protobuf` and `application/json`. Everything
-  else is rejected, not tolerated. A client sends whichever encoding is
-  cheaper for it to produce: JSON is what a JavaScript SDK sends and what a
-  hand-rolled browser client builds from a serialiser it already has;
-  protobuf is smaller on the wire and needs only a message-encoding library.
+  else is rejected, not tolerated. Which encoding a client sends is its choice
+  (`client-export.md`, *Encoding and transport*).
 - **Refuse OTLP metrics from clients.** Arbitrary metric names and labels
   arriving from the internet is unbounded cardinality with a stranger's hand on
   the dial — the one item here that can cost real money within an afternoon.
@@ -430,10 +331,10 @@ The complete set of exceptions:
   dropped. A volume control, applied without reading anything.
 - **Whole items the endpoint drops are reported**, in OTLP's partial-success
   response with the rejected count and a reason, so a client that is losing
-  spans can say so locally (*What the client must do*). Trimming attributes
-  inside an item is not a rejection and is not reported. An ingest built from
-  a collector cannot produce partial success for a drop in a later processor;
-  it records that as a deviation, with the counter that shows the drops.
+  spans can say so locally (`client-export.md`). Trimming attributes inside an
+  item is not a rejection and is not reported. An ingest built from a collector
+  cannot produce partial success for a drop in a later processor; it records
+  that as a deviation, with the counter that shows the drops.
 
 Two consequences of trusting the rest, worth stating once:
 
@@ -484,8 +385,7 @@ request is refused — not a filtered part of it — and three things happen:
   nothing else: this is a configuration fault, and naming it is the difference
   between a five-minute fix and an afternoon. The client refreshes its token
   once and, when the refreshed token is refused too, stops for the session
-  instead of retrying a batch that can never succeed (*What the client must
-  do*).
+  instead of retrying a batch that can never succeed (`client-export.md`).
 
   **`401`, the same as every other refusal of the token.** RFC 6750 maps this
   finer — `invalid_token` → 401, `insufficient_scope` → 403 — and that mapping
@@ -590,16 +490,3 @@ Redact at the ingest endpoint, before it reaches a store with different access
 control from the product's database, and set a retention period deliberately
 rather than inheriting the platform's. Stamping identity is a decision that was
 made; carrying content alongside it is usually an accident.
-
-## Making it worth the trouble
-
-**Trace continuity is the payoff.** The point of client spans is that a user's
-action and the server work it caused are one trace. The client must propagate
-`traceparent` on its API calls, and the web SDK must be configured to propagate
-to the origins it calls — same-origin `/api` needs no CORS allowance, but any
-cross-origin call the app makes does. Miss this and you have two disconnected
-traces and most of the value is gone.
-
-**Late data is normal.** Mobile clients buffer offline and flush on
-reconnection, so plan for spans arriving hours after they happened, and check
-that against the ingestion windows above before relying on it.

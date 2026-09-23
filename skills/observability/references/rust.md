@@ -230,6 +230,6 @@ same module with in-memory ones and assert on what was received:
 
 The OpenTelemetry crates do not build for `wasm32`. A Rust SPA has no crate to
 adopt: it hand-rolls OTLP/JSON over `fetch` with the bounded buffer and the
-failure rules of `client-telemetry.md`, or binds the JavaScript SDK through
+failure rules of `client-export.md`, or binds the JavaScript SDK through
 `wasm-bindgen`. Either way that reference applies unchanged; this one does
 not.
