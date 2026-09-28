@@ -8,7 +8,9 @@ Companion to `../SKILL.md`. Read it when a product is approaching `1.0.0`
 The MVP-completion card does not merge until each line of `../SKILL.md` §1 has
 an answer of the form *"here is where it is done, and here is what shows it
 working"*. Evidence is a test, a query or a screenshot of a live panel — not an
-assertion that the code calls a tracing library.
+assertion that the code calls a tracing library. Dashboards and alerts are not
+on the list: they are opt-in per product (`../SKILL.md` §8), and a product
+without them signs off on queries alone.
 
 | Bar (§1) | Evidence that settles it |
 | --- | --- |
@@ -16,10 +18,9 @@ assertion that the code calls a tracing library.
 | 2. Resource attributes | The exported-attributes test; one query per signal filtered on `service.name` |
 | 3. Spans at every entry point and process boundary | A trace of one real request, showing the edge span, the product's span and its database/HTTP children |
 | 4. Structured, correlated logs | A log line for that same request, found by its `trace_id` |
-| 5. RED + saturation | The dashboard panels, non-empty, under real traffic |
+| 5. RED + saturation | A query per metric, non-empty under real traffic |
 | 6. Build info metric | A query joining a working metric to `<app>.build.info` (stored as `<app>_build_info`) |
-| 7. Dashboard, one symptom alert, the absence alert | The published dashboard uid; both alert rules and the symptom alert's runbook link |
-| 8. Telemetry optional, health separate | The no-collector and no-variables tests; the deploy gate's health check, with no telemetry dependency |
+| 7. Telemetry optional, health separate | The no-collector and no-variables tests; the deploy gate's health check, with no telemetry dependency |
 
 Record the answers in the card or the repo's deploy doc. A gap that is
 deliberate is recorded with its reason and what would close it — the same rule
@@ -47,14 +48,15 @@ is a picture of the problem.
    forbidden-label test in the same change, before there is a cardinality
    problem to unpick.
 5. **The build-info metric**, once there is anything to join it to.
-6. **Dashboard, then alerts** (`dashboards-and-alerts.md`). Alerts last,
+6. **Only if the product opts in: dashboard, then alerts**
+   (`dashboards-and-alerts.md`). Not required for the bar. Alerts last,
    because an alert on a metric whose shape is still changing trains everyone
    to ignore it.
 
 ## Rolling back a signal
 
 A signal that costs more than it is worth may be dropped, and dropping one is a
-product change like any other: remove the instrumentation, remove the panels
+product change like any other: remove the instrumentation, remove any panels
 and alerts that read it, and record in the repo why it went. What is not
 acceptable is leaving a dashboard panel or an alert rule querying a metric the
 product no longer exports — a silent panel reads as a healthy one.

@@ -2,11 +2,17 @@
 
 Companion to `../SKILL.md` §8. Read it before adding or changing either.
 
+**Opt-in only.** Dashboards and alerts are not required and are not part of the
+MVP bar. A product has them only when its own `AGENTS.md` records that it opts
+in — to dashboards, to alerts, or to both. Everything below applies to a
+product that has opted in; in one that has not, add neither and treat their
+absence as the intended state, not a gap.
+
 ## Ownership
 
 **The product repo owns them.** Dashboard JSON and alert rules live beside the
-code that exports the metrics they read, and ship in the **same PR** as those
-metrics — a metric added without its panel is a metric nobody finds, and a
+code that exports the metrics they read, and — once the product has opted in —
+ship in the **same PR** as those metrics — a metric added without its panel is a metric nobody finds, and a
 panel added later has no reviewer who remembers what the metric means.
 
 The platform repo owns only infrastructure dashboards (host, collector,
@@ -55,7 +61,8 @@ for the person who has already decided something is wrong.
 - **Every alert has an owner and an urgency.** If nobody would get out of bed
   for it, it is not a page.
 - **A pushing process that dies goes quiet.** Nothing scrapes it, so nothing
-  reports it down. Every product carries one absence alert per environment on
+  reports it down. Every product that opts into alerts carries one absence
+  alert per environment on
   its build-info gauge, which fires for a dead process, a broken export path
   and a deployment whose telemetry variables were left out alike; the health
   check, kept separate for exactly this, says which. It is also what makes

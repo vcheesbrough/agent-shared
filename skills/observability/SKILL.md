@@ -33,7 +33,7 @@ reference only for the task it names:
 | Building or operating the endpoint that accepts client telemetry | `references/client-ingest.md` |
 | A Rust product: crates, pinning, what the SDK reads, where it falls short | `references/rust.md` |
 | Wiring the variables through sovereign-config on this estate | `references/deployment.md` |
-| Adding or changing a dashboard or alert | `references/dashboards-and-alerts.md` |
+| Adding or changing a dashboard or alert (opt-in, §8) | `references/dashboards-and-alerts.md` |
 | Signing off `1.0.0`, or retrofitting an existing product | `references/mvp-checklist.md` |
 
 **Terms**
@@ -81,19 +81,20 @@ order to retrofit them in when a product is already part-built.
    (`<app>.build.info`, value `1`, attributes such as `version`, `revision`;
    stored as `<app>_build_info` after the platform's translation) that queries
    join against (§4).
-7. **One dashboard, owned by the product repo**, covering those signals, **at
-   least one symptom alert** with a runbook link, and **the absence alert** on
-   the build-info gauge that stands in for `up` under push
-   (`references/dashboards-and-alerts.md`).
-8. **Telemetry is optional at runtime** — no `OTEL_*` variables means no
+7. **Telemetry is optional at runtime** — no `OTEL_*` variables means no
    telemetry and nothing else changes, an unreachable collector degrades
    telemetry and nothing else (§6), and only a half-configured set is a fault
    that fails startup (§2) — and **health checking is separate from it**, so a
    telemetry failure can never fail a deploy gate.
 
+**Dashboards and alerts are not part of the bar.** They are opt-in per product
+(§8): a product reaches `1.0.0` on the signals above without either, and the
+signals are queryable without them.
+
 **Per iteration, decide consciously.** Every card that changes behaviour
 decides whether it needs new or changed metrics, spans, log fields,
-correlation, dashboards, alerts or runbook text. "No change needed" is a
+correlation or runbook text — and, in a product that has opted into them,
+dashboards and alerts. "No change needed" is a
 decision that gets recorded; it is not the same as not having thought about it.
 
 ## 2. The egress contract
@@ -108,8 +109,9 @@ decision that gets recorded; it is not the same as not having thought about it.
   and it cannot serve a job that exits, which §1.3 counts as an entry point.
   Push keeps one identity source for every signal, can carry trace exemplars
   where the SDK supports them, and opens no listening port for a side purpose. What scrape
-  supplied for free is supplied by rule instead: a stable instance id (§4) and
-  an absence alert in place of `up` (§1.7). Temporality is **cumulative**, and
+  supplied for free is supplied by rule instead: a stable instance id (§4) and,
+  in a product that opts into alerts, an absence alert in place of `up` (§8).
+  Temporality is **cumulative**, and
   it is not a product choice: a backend that wants delta gets it from the
   collector.
 - **The standard `OTEL_*` environment variables are the whole configuration
@@ -153,10 +155,11 @@ decision that gets recorded; it is not the same as not having thought about it.
   `OTEL_LOGS_EXPORTER` set to `none` silence one signal each. Off never
   touches propagation: the transport layer still extracts inbound trace
   context and injects it outbound, as the spec requires of a disabled SDK, so
-  a silent service does not break the trace passing through it. What makes a
-  silent default safe in production is §1.7's absence alert: a deployment that
-  should report and does not is noticed, whether it lost its variables or its
-  process.
+  a silent service does not break the trace passing through it. In a product
+  that opts into alerts, the absence alert (§8) is what makes a silent default
+  safe in production: a deployment that should report and does not is
+  noticed, whether it lost its variables or its process. A product without
+  alerts accepts that silence goes unnoticed until someone looks.
 - **On this estate the variables arrive through sovereign-config**, in a layer
   of their own per product environment, with facts shared across products
   stored once and aliased: `references/deployment.md`. Recommended, not
@@ -359,13 +362,21 @@ product code ──► the language's logging / span / metric façade
   typed as a literal at a call site is still checked;
 - shutdown flushes pending spans within its timeout;
 - nothing outside the telemetry module imports an SDK or exporter type;
-- dashboard queries reference metric names the product actually exports — as
-  the platform stores them, after its translation of units and separators — so
-  a rename breaks the test rather than the dashboard.
+- where the product has a dashboard or alert rules, their queries reference
+  metric names the product actually exports — as the platform stores them,
+  after its translation of units and separators — so a rename breaks the test
+  rather than the dashboard.
 
 ## 8. Dashboards, alerts and the platform
 
-Dashboards and alerts are **product artefacts**: their source lives in the
+**Dashboards and alerts are optional, and opt-in per product.** Nothing in
+this contract requires either, and neither is part of the MVP bar (§1). A
+product opts in by recording the decision in its own `AGENTS.md`; until it
+does, do not add dashboards or alert rules to it, and do not treat their
+absence as a gap. A product may opt into dashboards without alerts, or the
+reverse.
+
+Once opted in, they are **product artefacts**: their source lives in the
 product repo, beside the metrics they chart, and ships in the same PR as those
 metrics. One dashboard serves every environment, filtered by a variable, and
 the repo's pipeline publishes it from trunk only.
