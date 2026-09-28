@@ -177,6 +177,9 @@ decision that gets recorded; it is not the same as not having thought about it.
   can reach — one ingest-and-collector pair per product environment. Client
   telemetry is user-controlled input: `references/client-ingest.md` is the
   contract for accepting it, `references/client-export.md` for sending it.
+  The ingest is not written per product: deploy the
+  `ghcr.io/vcheesbrough/otlp-collector-oidc` image, one instance per product
+  environment (`references/client-ingest.md`, *The reference ingest*).
 - **Deviations are recorded.** A platform that can only scrape (a Prometheus
   `/metrics` endpoint) or can only collect stdout gets that written down in the
   repo's `AGENTS.md`, with what it would take to move to OTLP. A product built
@@ -372,7 +375,9 @@ See `references/dashboards-and-alerts.md` before adding or changing either.
 **There is no reference implementation.** No product on this machine yet meets
 §1 in full, and none is to be copied as if it did — including `v-note`, whose
 telemetry predates this contract and exports only traces over OTLP. Apply the
-contract, not a repo. The platform side — collector endpoints, the label
+contract, not a repo. The one exception is client ingest, which is not product
+code: `otlp-collector-oidc` is the image to deploy for it, not a pattern to
+copy (`references/client-ingest.md`). The platform side — collector endpoints, the label
 contract it expects, retention — is `mini-config`'s
 `monitoring-stack/OBSERVABILITY.md`, which is the authority for the receiving
 end and nothing else: where it tells an application what to emit, this skill

@@ -65,6 +65,52 @@ loopback or a private network, no published ports, no Docker socket, config the
 app cannot rewrite, memory-limited, and never in a health gate
 (`../SKILL.md` §6).
 
+## The reference ingest: `otlp-collector-oidc`
+
+**Deploy the published image rather than writing an ingest.**
+`ghcr.io/vcheesbrough/otlp-collector-oidc` (repo `vcheesbrough/otlp-collector-oidc`)
+is an OpenTelemetry Collector distribution built to this file: it validates a
+bearer access token against the product's OIDC provider (signature, issuer,
+audience, expiry, `telemetry:write`), refuses a missing `sub` or
+`preferred_username` with `401` and the reason in the body, caps the
+*decompressed* body, stamps `user.*` and the deployer's static attributes
+(`deployment.environment.name`, `telemetry_source=client`) over whatever the
+client sent, bounds `service.name` and timestamps, and forwards plain OTLP
+upstream. The edge proxy still supplies the rate limit; the image does not.
+Pin a version tag — `:edge` follows its `main`.
+
+It collapses the pair into one container: it *is* the collector, and its
+upstream is the platform's shared collector (Alloy here). One instance per
+product environment, unmodified, configured only by environment variables.
+
+**No path prefix, for either protocol.** The edge routes OTLP's own paths
+on the product's hostname straight to the container, unrewritten: OTLP/HTTP
+on `/v1/` (`/v1/traces`, `/v1/logs`, `/v1/metrics`) and OTLP/gRPC on
+`/opentelemetry.proto.collector`, both on its one TLS port. The client's
+endpoint is the bare origin, `https://myapp.example.com`, for both. A prefix
+is not offered because standard gRPC clients cannot send one — they build the
+method path themselves and ignore the endpoint's — and one rule for both
+protocols beats a stripped HTTP route beside an unstripped gRPC one. So the
+application's own routes leave `/v1/` free (they live under `/api`).
+
+Its repo holds what this file does not: `docs/configuration.md` for every
+variable, `docs/reference-deployment.md` for this estate's topology, Traefik
+labels and sovereign-config layout, `docs/proxies/traefik.md`,
+`docs/providers/authentik.md` with a blueprint for the `telemetry:write` scope,
+and `docs/runbook.md`.
+
+Where it departs from this file, by its own recorded design:
+
+- **Bearer only — no session cookie.** A browser client must hold an access
+  token, so the cookie form under *Authentication* is not available with it.
+- **Client metrics are accepted**, on a separate pipeline that never carries
+  identity, allowlisted by metric name and label key and capped in streams.
+  Both allowlists default to empty, which drops every client metric — the
+  *Edge controls* rule holds until a deployer opens them deliberately.
+- **Drops after the client's `200`** — a `service.name` outside the allowed
+  set, a timestamp out of bounds — are counted, not reported as partial
+  success (*What the endpoint changes about the payload*).
+
 ## One endpoint per environment
 
 **Every environment has exactly one ingest endpoint, shared by the services of
@@ -94,15 +140,15 @@ that matters most — dev data in production dashboards is the failure that
 wastes an incident.
 
 **It is same-origin with the app**, because the pair belongs to that product:
-the edge routes `myapp.example.com/api` to the application and
-`myapp.example.com/otlp` to the ingest service, two containers behind one
-hostname. The app never proxies telemetry — it is not in that path at all —
+the edge routes `myapp.example.com/api` to the application and OTLP's own
+paths — `myapp.example.com/v1/…`, and the gRPC service paths — to the ingest
+service, two containers behind one hostname (*The reference ingest*). The app never proxies telemetry — it is not in that path at all —
 and the browser sees one origin, so there is no CORS preflight, no access token
 in JavaScript, and no separate telemetry hostname for a filter list to match.
 
 Three mechanics that follow:
 
-- **The session cookie must reach `/otlp`** — `Path=/`, not a cookie scoped to
+- **The session cookie must reach `/v1/`** — `Path=/`, not a cookie scoped to
   `/api`. `SameSite=Lax` is fine, these being same-site requests.
 - **The ingest service validates that session itself.** It is a sibling of the
   app in the same environment, reading the same configuration subtree and the
@@ -389,8 +435,8 @@ request is refused — not a filtered part of it — and three things happen:
 
   **`401`, the same as every other refusal of the token.** RFC 6750 maps this
   finer — `invalid_token` → 401, `insufficient_scope` → 403 — and that mapping
-  is deliberately not used. The reference ingest endpoint is a collector
-  distribution, where the authenticator never chooses a status: the interceptor
+  is deliberately not used. The reference ingest endpoint,
+  `otlp-collector-oidc`, is a collector distribution, where the authenticator never chooses a status: the interceptor
   answers `401` with the error text as the body, and the receiver's one
   override is reserved for "not ready", answered `503` so clients back off. An
   ingest written into the product could answer `403`, and must not — clients
