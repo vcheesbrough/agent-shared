@@ -9,7 +9,7 @@ steps:
     settings:
       mode: resolve
       images: [registry.desync.link/APP]
-      environments:                      # optional; this is the default
+      environments:                      # optional; omit for dev from any branch, prod from the repo's default branch
         dev: {}
         prod: { branches: [main] }
       github_token: { from_secret: github_token }

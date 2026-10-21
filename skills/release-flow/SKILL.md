@@ -37,7 +37,7 @@ override this skill where it says so.
 | Deploy | A Woodpecker deployment (the Deploy button, `deployment` event) to a target. It never builds: `resolve` picks the commit's tagged build, else its newest published build. |
 | Git tag | Annotated `<version>`, identical to the docker tag, meaning **"this build was deployed"**. Written by `tag` once the deploy steps succeed, whatever smoke tests later find. Never moved; never a second one on a commit. |
 | Order | Free: dev before prod, after it, or not at all. Whichever deploys a commit first writes the tag; every later deploy, any target, reuses that build. |
-| Policy | Which targets exist and which branches may deploy to each is the repo's `environments` setting (default: `dev` from any branch, `prod` from `main`). There is deliberately no ordering option. |
+| Policy | Which targets exist and which branches may deploy to each is the repo's `environments` setting (default: `dev` from any branch, `prod` from the repo's default branch, `main` or `master`). There is deliberately no ordering option. |
 
 The version travels between steps in `.release-tag`; every step reads
 `$(cat .release-tag)`.
