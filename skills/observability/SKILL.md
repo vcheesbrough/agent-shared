@@ -32,6 +32,7 @@ reference only for the task it names:
 | Sending telemetry from a browser, phone or desktop client | `references/client-export.md` |
 | Building or operating the endpoint that accepts client telemetry | `references/client-ingest.md` |
 | A Rust product: crates, pinning, what the SDK reads, where it falls short | `references/rust.md` |
+| A Python product: packages, pinning, what the SDK reads, the root-logger deadlock, bounded shutdown | `references/python.md` |
 | Wiring the variables through sovereign-config on this estate | `references/deployment.md` |
 | Adding or changing a dashboard or alert (opt-in, §8) | `references/dashboards-and-alerts.md` |
 | Signing off `1.0.0`, or retrofitting an existing product | `references/mvp-checklist.md` |
