@@ -1,0 +1,35 @@
+# .woodpecker/deploy.yml — a deployment never builds. resolve chooses the
+# build; tag records it once the deploy steps succeed.
+when:
+  - event: deployment
+
+steps:
+  resolve:
+    image: ghcr.io/vcheesbrough/woodpecker-plugin-release-versions:0.2.0
+    settings:
+      mode: resolve
+      images: [registry.desync.link/APP]
+      environments:                      # optional; this is the default
+        dev: {}
+        prod: { branches: [main] }
+      github_token: { from_secret: github_token }
+      registry_username: { from_secret: zot_ci_user }
+      registry_password: { from_secret: zot_ci_password }
+
+  deploy-dev:                            # repo-specific: deploys APP:$(cat .release-tag)
+    depends_on: [resolve]
+    when: [{ evaluate: 'CI_PIPELINE_DEPLOY_TARGET == "dev"' }]
+
+  deploy-prod:                           # repo-specific
+    depends_on: [resolve]
+    when: [{ evaluate: 'CI_PIPELINE_DEPLOY_TARGET == "prod"' }]
+
+  tag:
+    depends_on: [deploy-dev, deploy-prod]
+    image: ghcr.io/vcheesbrough/woodpecker-plugin-release-versions:0.2.0
+    settings:
+      mode: tag
+      github_token: { from_secret: github_token }
+
+  smoke:                                 # repo-specific; beside tag: a failure fails the pipeline, never the tag
+    depends_on: [deploy-dev, deploy-prod]

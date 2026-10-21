@@ -1,0 +1,55 @@
+# A repo on GitHub Actions: one workflow, build then one job per environment.
+# The plugin reads GITHUB_SHA, GITHUB_REPOSITORY, GITHUB_REF_NAME and
+# GITHUB_RUN_ID itself; settings become `with:` inputs.
+on:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write                    # version claims refs/builds/<version>
+    outputs:
+      release_tag: ${{ steps.version.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        uses: vcheesbrough/woodpecker-plugin-release-versions@0.2.0
+        with:
+          mode: version
+          major_minor_source: cargo
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - run: >                           # repo-specific build and tests
+          docker build -t registry.desync.link/APP:$(cat .release-tag)
+          --label org.opencontainers.image.version=$(cat .release-tag)
+          --label org.opencontainers.image.revision=$GITHUB_SHA .
+      - uses: vcheesbrough/woodpecker-plugin-release-versions@0.2.0
+        with:
+          mode: publish
+          images: registry.desync.link/APP
+          registry_username: ${{ secrets.ZOT_CI_USER }}
+          registry_password: ${{ secrets.ZOT_CI_PASSWORD }}
+
+  deploy-prod:
+    needs: build
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    environment: prod                    # GitHub Environments give the approval gate
+    permissions:
+      contents: write                    # tag pushes the git tag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: vcheesbrough/woodpecker-plugin-release-versions@0.2.0
+        with:
+          mode: resolve
+          deploy_target: prod
+          images: registry.desync.link/APP
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          registry_username: ${{ secrets.ZOT_CI_USER }}
+          registry_password: ${{ secrets.ZOT_CI_PASSWORD }}
+      - run: echo "deploy APP:$(cat .release-tag)"   # repo-specific
+      - uses: vcheesbrough/woodpecker-plugin-release-versions@0.2.0
+        with:
+          mode: tag
+          deploy_target: prod
+          github_token: ${{ secrets.GITHUB_TOKEN }}

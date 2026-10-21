@@ -1,0 +1,41 @@
+# .woodpecker/build.yml — one build per push. Replace the repo-specific steps;
+# keep version first and publish last, after every test.
+when:
+  - event: [push, manual]
+
+steps:
+  version:
+    image: ghcr.io/vcheesbrough/woodpecker-plugin-release-versions:0.2.0
+    settings:
+      mode: version
+      major_minor_source: cargo          # cargo | go | pyproject
+      github_token: { from_secret: github_token }
+
+  build:                                 # repo-specific
+    depends_on: [version]
+    image: docker:cli
+    volumes: [/var/run/docker.sock:/var/run/docker.sock]
+    commands:
+      - >
+        docker build
+        -t registry.desync.link/APP:$(cat .release-tag)
+        --build-arg RELEASE_TAG=$(cat .release-tag)
+        --label org.opencontainers.image.version=$(cat .release-tag)
+        --label org.opencontainers.image.revision=$CI_COMMIT_SHA
+        .
+
+  test:                                  # repo-specific: unit, lint, e2e against the built image
+    depends_on: [build]
+
+  publish:
+    depends_on: [test]                   # every test gate, so the registry holds tested builds only
+    image: ghcr.io/vcheesbrough/woodpecker-plugin-release-versions:0.2.0
+    volumes: [/var/run/docker.sock:/var/run/docker.sock]
+    settings:
+      mode: publish
+      images: [registry.desync.link/APP] # one entry per image the repo ships
+      registry_username: { from_secret: zot_ci_user }
+      registry_password: { from_secret: zot_ci_password }
+
+# Several workflows in one pipeline (e.g. web + android): run `version` in
+# each; they find the number their pipeline already claimed.

@@ -77,15 +77,17 @@ iteration heading or semver coupling.
   - **Pre-MVP** (`0.x.x`, before the MVP lands on trunk): `0.N.P` — iteration 1
     → `0.1.0`, iteration 5 → `0.5.0`. A `0.x.x` version means the product has
     not yet reached its MVP.
-  - **MVP release:** when the MVP-completion card merges to trunk, set the
-    workspace to `1.0.0` and tag it. Crossing to `1.0.0` **is** the MVP
+  - **MVP release:** when the MVP-completion card merges to trunk, the
+    workspace is `1.0.0`; the first deploy of that build writes the `1.0.0`
+    tag (never tag it by hand). Crossing to `1.0.0` **is** the MVP
     milestone. **Observability is part of that bar** — a product does not reach
     `1.0.0` until it meets §1 of the `observability` skill (§10). Pre-MVP
     iterations may leave parts of it unbuilt; the MVP-completion card may not.
   - **Post-MVP** (`1.x.x`): `1.N.P`, with `N` **continuing** from the last
     pre-MVP iteration. Any `1.x.x` release represents a post-MVP release.
-  - **Patch `P`** resets to `0` at iteration start and bumps only on the active
-    branch.
+  - **Patch `P`** is not set by hand. The manifest carries `MAJOR.MINOR.0`; in
+    repos on the release plugin each build claims the next patch on its line,
+    and the first deploy writes the git tag (`release-flow` skill, §10).
 - **Todo / backlog cards carry a plain descriptive heading only** — no
   `Iteration N`, no `feat/iteration-N-…` branch, no semver in the body until the
   card starts.
@@ -273,3 +275,8 @@ repo's own `AGENTS.md` may override.
   the cardinality rules. Observability is part of the MVP bar (§2), so load it
   before designing telemetry, adding a metric/span/log field/dashboard/alert,
   or taking a product to `1.0.0`.
+- **`release-flow`** — how a repo builds, versions, publishes and promotes
+  container images: one build per push, a gap-free patch counter, promote
+  never rebuild, the first deploy writes the git tag. Load before wiring or
+  changing a build or deploy pipeline, deploying, or migrating a repo off its
+  own release scripts.

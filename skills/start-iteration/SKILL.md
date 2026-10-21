@@ -41,7 +41,10 @@ branches, and do not stack branches.
 7. **Set the workspace version** (when a version file exists):
    - **Pre-MVP** (before the MVP lands on trunk): `0.N.0`.
    - **Post-MVP** (after `1.0.0` is on trunk): `1.N.0`, with `N` continuing.
-   - Patch resets to `0` at iteration start.
+   - Patch stays `0` in the manifest. In repos on the release plugin, builds
+     claim the patch (`0.N.x` on this branch while trunk keeps its own line)
+     and the first deploy writes the tag; never bump it or tag by hand
+     (`release-flow` skill).
 
 Now implement against the card's acceptance criteria, scoped to this card.
 
