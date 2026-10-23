@@ -5,7 +5,7 @@ description: Self-review a pull request you opened, post it to GitHub, then reso
 
 # PR review loop
 
-Use this when you **open or push to a PR** (self-review) and whenever a PR on
+Use this when you **open a PR or push a review batch to it** (self-review) and whenever a PR on
 the current branch has **unresolved review threads** — from your own review,
 another agent, or a human. Part A authors a review; Part B resolves review
 threads. Run A then B when you opened the PR; run B alone when triaging existing
@@ -30,9 +30,16 @@ stay: the user decides every review comment, and the user performs the merge.
 
 ## Part A — self-review the PR you opened
 
-Do this immediately after `gh pr create` or a push to the PR branch. Do **not**
-wait for remote review agents (Woodpecker `pr-review`, Cursor Automation,
-Bugbot); treat them as supplementary and unreliable.
+Do this immediately after `gh pr create` (the **full round**), and again after
+each Part B batch push (a **delta round**). Do **not** wait for remote review
+agents (Woodpecker `pr-review`, Cursor Automation, Bugbot); treat them as
+supplementary and unreliable.
+
+**The loop must converge.** A thorough review happens once, in the full round.
+A delta round checks only the fix commits since the last review: did a fix
+break something, and is it tested. It does not re-review the whole PR, so the
+diff under review shrinks every round. If each round re-reviewed the whole PR,
+every batch of fixes would widen the target and draw a fresh set of comments.
 
 **Delegate the review to the `pr-self-review` subagent — do not review the diff
 yourself.** You wrote the code; you already believe it is correct, and that
@@ -49,9 +56,22 @@ Agent tool unless asked" rule does not apply here.
 
    > Review PR #$PR on $OWNER/$REPO. Trunk is `<trunk>`.
 
+   For a delta round, add the last reviewed head, taken from the newest
+   `<!-- pr-self-review sha=… -->` marker in the PR's comments:
+
+   > Review PR #$PR on $OWNER/$REPO. Trunk is `<trunk>`. SINCE=`<sha>`.
+
    **Nothing else.** No summary of what the branch does, no rationale for the
-   design, no "I already checked X". Every such sentence hands the reviewer
-   your bias back and spends the clean context you just paid for.
+   design, no "I already checked X", no list of what the fixes were for. Every
+   such sentence hands the reviewer your bias back and spends the clean context
+   you just paid for. `SINCE` is a coordinate, not rationale.
+
+   **Round 3 and later need the user's go-ahead.** If a delta round still found
+   something, ask the user before running yet another self-review after the
+   next batch. Use `AskUserQuestion` with options to run another delta round or
+   stop self-reviewing and go to hand-back. A loop that keeps finding things
+   usually means the PR is too big or the fixes keep widening it. Raise that
+   with the user rather than running more rounds automatically.
 
 3. **Let it post its own comments.** The subagent files one inline comment per
    finding plus a summary comment, directly. It files **no review verdict** —
@@ -109,6 +129,16 @@ the review was authored without a clean context.
      ("Add the bounds check") and each `description` saying what changes and
      what it costs. Put your recommendation first, suffixed
      `(Recommended)`.
+   - **Offer the narrowest fix first:** the smallest change that resolves
+     exactly what the thread raised. Do not bundle a refactor, a
+     generalisation, or "while we're here" cleanups into a fix option. Every
+     extra line is new diff for the next delta round to review.
+   - **When the right fix goes beyond the PR's stated scope** (it touches code
+     the PR didn't change, adds a feature, or reworks a design), include
+     **"Defer to a follow-up card"**. The description says a Todo card is
+     created on the repo's board, linked after this iteration's card, and the
+     thread gets a reply with the card number. Recommend it for anything that
+     would noticeably grow the PR.
    - **One option is always an explicit ignore / push back** — "Won't fix,
      reply on the thread" — with the description saying what goes in the reply.
    - `multiSelect: false` unless the fixes genuinely compose.
@@ -120,12 +150,15 @@ the review was authored without a clean context.
    **The user decides.** A thread whose answer is "let's discuss" gets no code
    change and stays unresolved.
 
-3. **Apply the chosen resolution locally.** Make the edits, run a quick sanity
-   check (e.g. `cargo check`, `trunk build`), but **do not commit yet** —
-   accumulate edits across the batch.
+3. **Apply the chosen resolution locally, and only that.** Make exactly the
+   edits the chosen option described. Make no adjacent improvements the user
+   didn't pick. Run a quick sanity check (e.g. `cargo check`, `trunk build`),
+   but **do not commit yet**: accumulate edits across the batch. For a
+   deferral, create the follow-up card with bored MCP now. It is a plain Todo
+   card (baseline §1) that quotes the thread and links back to it.
 
-4. **Reply on the thread, then resolve it** when the user picked a fix or an
-   explicit won't-do (leave "discuss further" open):
+4. **Reply on the thread, then resolve it** when the user picked a fix, a
+   deferral, or an explicit won't-do (leave "discuss further" open):
 
    ```bash
    gh api repos/$OWNER/$REPO/pulls/$PR/comments/$COMMENT_ID/replies \
@@ -140,8 +173,12 @@ the review was authored without a clean context.
    to the same branch. Verify CI afterward (Woodpecker pipeline / commit status)
    before declaring the batch done.
 
-6. **Re-enter Part B** when the user asks for the next round, or when polling
-   reveals new unresolved threads (remote agents re-run on each push).
+6. **Run a delta round, then re-enter Part B.** After the batch push, run
+   Part A's delta round (subject to the round-3 check-in), then triage what it
+   and any remote agents posted. Remote agents re-run on each push and review
+   the whole PR. Hold their new threads to the same bar: a finding on code this
+   PR didn't change, or one that re-raises a resolved decision, gets the defer
+   or won't-fix option recommended.
 
 7. **Hand the PR back.** When no unresolved threads remain and CI is green,
    report *"PR #$PR is green and ready to merge"* and stop. **Do not merge** —
@@ -159,6 +196,10 @@ the review was authored without a clean context.
   regardless of how obvious or how binary the choice looks.
 - **One commit per batch** — never one-per-comment, never a force-push.
 - **Don't auto-resolve** threads the user marked "discuss further" or "skip".
+- **Scope only shrinks during review.** Fixes are the narrowest change that
+  resolves the thread. Anything bigger is deferred to a follow-up card, never
+  absorbed into the PR. Only the first self-review covers the whole PR; later
+  rounds are delta-only, and round 3 onward needs the user's go-ahead.
 - **All resolution explanations go on the PR**, not back-channel chat.
 - Self-review is **required** when you open the PR; remote agent output is
   optional/supplementary.

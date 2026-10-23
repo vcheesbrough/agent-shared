@@ -181,13 +181,23 @@ on a real RIGHT-side diff line, plus a summary comment, and **no review
 verdict**. Unresolved threads are what signal that work remains. Treat remote
 review agents as **supplementary and unreliable**, not the primary path.
 
+**The review converges; scope only shrinks.** The self-review is thorough once,
+on the whole PR, when the PR opens. After each fix batch it runs a **delta
+round** over only the commits since its last review, checking that the fixes
+broke nothing and are tested. Round 3 onward runs only with the user's
+go-ahead. Threads go only on lines the PR changed. A resolved decision is never
+raised again. A fix is the narrowest change that resolves its thread, and
+anything bigger is **deferred to a follow-up card** rather than absorbed into
+the PR.
+
 **Then run the comment loop** for every unresolved thread (yours, humans', and
 bots' — treated equally):
 
 1. Fetch unresolved threads via GraphQL (`reviewThreads` where
    `isResolved == false`).
 2. **Present one comment at a time** — file/line, author, full body, your
-   analysis, and concrete fix option(s) including an explicit ignore/push-back.
+   analysis, and concrete fix option(s) — narrowest first, a defer-to-card
+   option when the fix outgrows the PR, and an explicit ignore/push-back.
    **Ask for the decision with the `AskUserQuestion` tool, one call per
    thread**, so every thread is decided through the same interface — including
    the binary ones, which are asked as a two-option question rather than a
