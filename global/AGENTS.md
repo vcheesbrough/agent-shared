@@ -113,6 +113,12 @@ iteration heading or semver coupling.
   merge or enable auto-merge, and never close a PR as a substitute for merging
   it. "Iteration done" means *"PR #N is green and ready to merge"* — the user
   merges, and only then does the card move to Done (§1).
+- **Exception — an explicit autonomous run.** When the user explicitly asks for
+  autonomous / unattended work, the **`autonomous-run`** skill (in
+  `agent-shared/skills/`) lifts the two user gates for the cards named in that
+  run only: you take your recommended option on each review thread and merge a
+  PR once it meets that skill's merge bar. Never infer it; consent ends with
+  the run.
 - **Outside an active iteration, ask first.** Before the card is In Progress,
   and in any repo or task not running as an iteration, do not commit or push
   unless the user explicitly asks.
@@ -215,6 +221,7 @@ bots' — treated equally):
 **Then hand the PR back.** When every thread is resolved and CI is green, report
 *"PR #N is green and ready to merge"* and stop. **You never merge** (§3) — the
 merge, and the card's move to Done that follows it, are the user's.
+(The one exception is an explicit autonomous run — §3, `autonomous-run` skill.)
 
 ## 6. Automated test coverage
 

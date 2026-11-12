@@ -64,6 +64,10 @@ Two things still belong to the user, and only two:
   reporting *"PR #N is green and ready to merge"*; the user merges, and only
   then does the card move to Done.
 
+When the user has explicitly asked for an autonomous run, the
+`autonomous-run` skill lifts both for the cards in that run; it calls this
+skill's steps 1–5 itself.
+
 If the card's scope turns out to be wrong mid-iteration, that is still worth
 raising — unattended means "don't ask permission for the mechanics", not "don't
 speak up".

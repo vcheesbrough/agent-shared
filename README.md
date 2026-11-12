@@ -16,6 +16,7 @@ agent-shared/
 │   ├── pr-review-loop/       # self-review a PR, then resolve threads
 │   ├── ci-watch/            # monitor CI to completion, reproduce failures
 │   ├── start-iteration/     # start a bored card as a numbered iteration
+│   ├── autonomous-run/      # work card(s) to merge unattended, in worktrees
 │   ├── api-versioning/      # design knowledge: remote API version contract
 │   └── observability/       # design knowledge: OTLP telemetry + the MVP bar
 ├── agents/                  # subagent definitions (Claude Code only)
@@ -44,13 +45,14 @@ via symlinks on this machine:
 Edit the files in this repo; the symlinks pick up changes automatically.
 Every skill under `skills/` gets the same pair of symlinks
 (`~/.claude/skills/<name>` and `~/.agents/skills/<name>`) — currently
-`pr-review-loop`, `ci-watch`, `start-iteration`, `api-versioning`, and
-`observability`.
+`pr-review-loop`, `ci-watch`, `start-iteration`, `autonomous-run`,
+`api-versioning`, `observability`, and `release-flow`.
 
 ## Skills: procedures and design knowledge
 
 Skills here come in two kinds. **Procedure skills** (`start-iteration`,
-`ci-watch`, `pr-review-loop`) package a workflow the baseline mandates.
+`ci-watch`, `pr-review-loop`, `autonomous-run`) package a workflow the
+baseline mandates or, for `autonomous-run`, the one explicit exception to it.
 **Topic skills** (`api-versioning`, `observability`) record a design decision
 worked out in one repo so every other repo starts from it: the rule, why it
 holds, and when it does not apply.
@@ -89,8 +91,11 @@ and per-agent `model:` frontmatter is the cheapest lever in the whole setup.
 
 Not everything is worth delegating. `start-iteration` is a handful of MCP calls
 returning small payloads; spawning a subagent costs more than it saves. Nor can
-the §5 Part B triage loop be delegated at all — it needs a user decision per
-comment. The test is: does it read a lot, return a little, and never need its
+the §5 Part B triage loop be delegated in an attended run — it needs a user
+decision per comment. (In an `autonomous-run`, each card's worker agent does
+its own triage, because the recommendation needs the implementation context;
+the orchestrator keeps the clean-context review and log diagnosis, so they
+never depend on a worker being able to spawn subagents of its own.) The test is: does it read a lot, return a little, and never need its
 intermediates again?
 
 ## Set up on a new machine

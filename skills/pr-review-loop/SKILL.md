@@ -209,6 +209,12 @@ the review was authored without a clean context.
   `--auto`, and never close a PR instead of merging it. The merge is the user's
   approval gate and the last human decision in the iteration.
 
+**Autonomous runs.** When the user has explicitly invoked the `autonomous-run`
+skill, that skill replaces two of these rules for the cards in the run: the
+recommended option is taken instead of asking (and says so in the thread
+reply), and the PR is merged once it meets that skill's merge bar. Every other
+rule here still holds.
+
 ## Repo-specific bits
 
 `OWNER`/`REPO` and the sanity-check commands come from the repo's own
