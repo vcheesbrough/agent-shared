@@ -41,7 +41,9 @@ the self-review from a clean context (§5).
    predecessor in the run. Within a wave, also serialise two cards whose
    bodies say they change the same files or the same schema/migration — they
    would only conflict at merge time.
-4. Run at most **3 cards concurrently** unless the user set a different cap.
+4. **No concurrency cap.** Every card in a wave starts at once — 20 independent
+   cards means 20 worktrees and 20 workers. Only dependencies (step 2) and
+   overlapping changes (step 3) put a card in a later wave; never the count.
 5. Tell the user the plan in a few lines (waves, order), then start — do not
    wait for approval; the invocation was the approval.
 
