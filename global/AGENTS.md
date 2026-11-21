@@ -297,3 +297,11 @@ repo's own `AGENTS.md` may override.
   never rebuild, the first deploy writes the git tag. Load before wiring or
   changing a build or deploy pipeline, deploying, or migrating a repo off its
   own release scripts.
+- **`migrations`** — every change to state outside the image that a release
+  needs (schema, stored data, external setup such as an identity-provider
+  blueprint) runs in a one-shot `migrate` step from the same image before the
+  server is replaced; the server verifies and never applies, privileged
+  credentials reach only that step as secret files, and every migration stays
+  compatible with the previous release. Load before adding or changing a
+  migration or external setup a release depends on, or writing the compose
+  file a product deploys with.

@@ -18,7 +18,8 @@ agent-shared/
 │   ├── start-iteration/     # start a bored card as a numbered iteration
 │   ├── autonomous-run/      # work card(s) to merge unattended, in worktrees
 │   ├── api-versioning/      # design knowledge: remote API version contract
-│   └── observability/       # design knowledge: OTLP telemetry + the MVP bar
+│   ├── observability/       # design knowledge: OTLP telemetry + the MVP bar
+│   └── migrations/          # design knowledge: one-shot migrate step per deploy
 ├── agents/                  # subagent definitions (Claude Code only)
 │   ├── pr-self-review.md    # reviews a PR diff in a clean context
 │   └── ci-diagnose.md       # reads failed CI logs, returns a short diagnosis
@@ -46,14 +47,14 @@ Edit the files in this repo; the symlinks pick up changes automatically.
 Every skill under `skills/` gets the same pair of symlinks
 (`~/.claude/skills/<name>` and `~/.agents/skills/<name>`) — currently
 `pr-review-loop`, `ci-watch`, `start-iteration`, `autonomous-run`,
-`api-versioning`, `observability`, and `release-flow`.
+`api-versioning`, `observability`, `release-flow`, and `migrations`.
 
 ## Skills: procedures and design knowledge
 
 Skills here come in two kinds. **Procedure skills** (`start-iteration`,
 `ci-watch`, `pr-review-loop`, `autonomous-run`) package a workflow the
 baseline mandates or, for `autonomous-run`, the one explicit exception to it.
-**Topic skills** (`api-versioning`, `observability`) record a design decision
+**Topic skills** (`api-versioning`, `observability`, `release-flow`, `migrations`) record a design decision
 worked out in one repo so every other repo starts from it: the rule, why it
 holds, and when it does not apply.
 
