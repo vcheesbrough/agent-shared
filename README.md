@@ -15,7 +15,7 @@ agent-shared/
 ├── skills/                  # portable Agent Skills (core spec only)
 │   ├── pr-review-loop/       # self-review a PR, then resolve threads
 │   ├── ci-watch/            # monitor CI to completion, reproduce failures
-│   ├── start-iteration/     # start a bored card as a numbered iteration
+│   ├── start-iteration/     # start a bored card in its iteration (release line X.Y)
 │   ├── autonomous-run/      # work card(s) to merge unattended, in worktrees
 │   ├── api-versioning/      # design knowledge: remote API version contract
 │   ├── observability/       # design knowledge: OTLP telemetry + the MVP bar

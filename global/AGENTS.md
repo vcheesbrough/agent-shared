@@ -38,8 +38,8 @@ When a repo uses **bored** Kanban cards as its task queue:
   source tree, replan if scope drifted, and `update_card` so acceptance, files,
   and out-of-scope notes stay accurate.
 - **Cards have no separate title field** — the board shows the first markdown
-  `#` heading in the body. The `Iteration N` heading convention (§2) applies to
-  that first heading.
+  `#` heading in the body. The `Iteration X.Y` heading convention (§2) applies
+  to that first heading.
 - **Cards have after and before links** these define ordering / dependencies, 
   they must be used to link cards together, where such dependencies exist.
 - **Cards have zero or more tags** these are used to categorize cards and filter
@@ -47,50 +47,71 @@ When a repo uses **bored** Kanban cards as its task queue:
   new tags on a board, only use those already present.
 
 > Repo-specific: the board slug/URL lives in each repo's own `AGENTS.md`. The
-> default iteration/branch/semver mapping is §2 below.
+> default iteration, branch and version convention is §2 below.
 
 ## 2. Iterations, branches & versioning (default)
 
-This is the **default** convention for repos that ship product code in
-numbered iterations (e.g. the Rust-app repos). A repo may **override** it — for
-example, `mini-config` names branches after the card (`feat/<slug>`) with no
-iteration heading or semver coupling.
+This is the **default** convention for repos that ship versioned product code
+(e.g. the Rust-app repos). A repo may **override** it — for example,
+`mini-config` names branches after the card (`feat/<slug>`) with no iteration
+heading or version.
 
 > The kickoff sequence is packaged as the **`start-iteration`** skill (in
 > `agent-shared/skills/`). Invoke that skill to start a card; the rules below
 > are its canonical description.
 
-- **One iteration = one bored card = one feature branch = one semver minor.**
-  Do not split an iteration across cards or branches, and do not stack.
-- **Assign `N` only when work starts.** The moment a card moves to In Progress,
-  it takes the next iteration number `N` — sequential, `highest existing N + 1`
-  across Done + In Progress cards (or `1` if none exist).
+- **An iteration is a release line, named by the `MAJOR.MINOR` it produces.**
+  *Iteration 3.1* is everything that ships as `3.1.x`. It may hold one card or
+  bundle several small ones. Each card keeps its own branch and PR, and none
+  is stacked on another.
+- **Versions follow in sequence from the last release.** The next line after
+  `3.0` is `3.1`, then `3.2`; a number is never skipped. A version is never
+  derived from a card number, a count of cards, or any other counter.
+- **A line is released once it reaches production.** Read the version
+  production runs from the product itself (its version endpoint), every time.
+  A git tag or a GitHub Release proves only that some deploy happened, often to
+  dev, so it is never evidence of a release. A repo with no production
+  environment says in its `AGENTS.md` what counts as released. Before anything
+  is released, the last released line is `0.0`.
+- **Assign the iteration when a card starts**, from production (P) and trunk's
+  manifest (T):
+  1. **T's line is newer than P's** (unreleased): the card joins *Iteration
+     T*. The version does not change.
+  2. **T's line is the one P runs** (released): the card opens the next
+     iteration, `P.MAJOR.(P.MINOR + 1)`, and sets the manifest to that line's
+     `.0` on its branch. Cards that start before it merges join the same
+     iteration.
+  3. **A new major** (`X.0`) is the user's decision — the MVP, or a breaking
+     change — never arithmetic. A new major starts at `X.0.0`.
 - **On In Progress**, `update_card` so:
-  1. the first `#` heading becomes `# Iteration N — <description>` (one prefix,
-     keep the descriptive title after the em dash);
-  2. the body records **Branch:** `feat/iteration-N-short-slug` (from trunk);
-  3. the body records the workspace **Version** (see below) once a version file
-     exists.
-- **Branch** `feat/iteration-N-short-slug` from trunk, created only after `N` is
-  fixed. Never branch from another feature branch.
-- **Versioning — major signals the MVP milestone, minor tracks the iteration:**
-  - **Pre-MVP** (`0.x.x`, before the MVP lands on trunk): `0.N.P` — iteration 1
-    → `0.1.0`, iteration 5 → `0.5.0`. A `0.x.x` version means the product has
-    not yet reached its MVP.
+  1. the first `#` heading becomes `# Iteration X.Y — <description>` (one
+     prefix, keep the descriptive title after the em dash);
+  2. the body records **Branch:** `feat/X.Y-<card>-<short-slug>` (from trunk);
+  3. the body records the **Version** `X.Y` once a version file exists.
+- **Branch** `feat/X.Y-<card>-<short-slug>` from trunk; the card number keeps
+  branches unique within an iteration. **PR title**
+  `Iteration X.Y — <description> (#<card>)`. Never branch from another feature
+  branch.
+- **Versioning — major signals the MVP milestone:**
+  - **Pre-MVP** (`0.x.x`, before the MVP lands on trunk): iterations `0.1`,
+    `0.2`, … A `0.x.x` version means the product has not yet reached its MVP.
   - **MVP release:** when the MVP-completion card merges to trunk, the
     workspace is `1.0.0`; the first deploy of that build writes the `1.0.0`
     tag (never tag it by hand). Crossing to `1.0.0` **is** the MVP
     milestone. **Observability is part of that bar** — a product does not reach
     `1.0.0` until it meets §1 of the `observability` skill (§10). Pre-MVP
     iterations may leave parts of it unbuilt; the MVP-completion card may not.
-  - **Post-MVP** (`1.x.x`): `1.N.P`, with `N` **continuing** from the last
-    pre-MVP iteration. Any `1.x.x` release represents a post-MVP release.
+  - **Post-MVP** (`1.x.x` and later): iterations continue in sequence from the
+    last release, `1.1`, `1.2`, … Any `1.x.x` release represents a post-MVP
+    release.
   - **Patch `P`** is not set by hand. The manifest carries `MAJOR.MINOR.0`; in
     repos on the release plugin each build claims the next patch on its line,
     and the first deploy writes the git tag (`release-flow` skill, §10).
+- **A version out of sequence is removed everywhere it reached** — registry
+  images, `refs/builds/*`, git tags and their releases — and trunk's manifest
+  is put back in sequence. It is never left behind.
 - **Todo / backlog cards carry a plain descriptive heading only** — no
-  `Iteration N`, no `feat/iteration-N-…` branch, no semver in the body until the
-  card starts.
+  `Iteration X.Y`, no branch, no version in the body until the card starts.
 
 ## 3. Branching & git safety
 

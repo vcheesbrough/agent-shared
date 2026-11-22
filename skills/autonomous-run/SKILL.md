@@ -52,20 +52,24 @@ the main checkout and work it yourself, applying §3–§5 below.
 
 ## 2. Start each card (orchestrator, serially)
 
-Iteration numbers must be assigned by one actor in one order, or two cards
-take the same N. So the orchestrator — you, the main session — starts every
-card itself, one at a time, in the order the plan gives:
+The iteration — the release line `X.Y` a card ships in — must be worked out
+by one actor in one order, so that only one card opens a new line and the rest
+join it. So the orchestrator — you, the main session — starts every card
+itself, one at a time, in the order the plan gives:
 
-1. Run `start-iteration` steps 1–5 for the card (move to In Progress, assign
-   `N`, reconcile, `update_card`). Assign `N` only when the card actually
-   starts, so a wave-2 card gets its number when wave 2 begins.
+1. Run `start-iteration` steps 1–5 for the card (move to In Progress, work out
+   the iteration from production's and trunk's versions, reconcile,
+   `update_card`). Work it out only when the card actually starts, so a wave-2
+   card reads the versions as they are when wave 2 begins. Cards in one run
+   share an iteration unless a release reaches production during the run; only
+   the first card to open a new line sets the manifest version.
 2. Instead of `git checkout -b`, create a **worktree** on the new branch from
    up-to-date trunk:
 
    ```bash
    git fetch origin
-   WT="$(git rev-parse --show-toplevel)/../$(basename "$(git rev-parse --show-toplevel)").wt/iteration-$N"
-   git worktree add -b "feat/iteration-$N-<slug>" "$WT" "origin/$TRUNK"
+   WT="$(git rev-parse --show-toplevel)/../$(basename "$(git rev-parse --show-toplevel)").wt/card-$C"
+   git worktree add -b "feat/$XY-$C-<slug>" "$WT" "origin/$TRUNK"
    ```
 
 3. Spawn one **worker** per card (Agent tool, `general-purpose`, background)
@@ -77,11 +81,12 @@ card itself, one at a time, in the order the plan gives:
 Give the worker coordinates and rules, not your own plan for the card — it
 reads the card itself:
 
-> You are implementing bored card #C (board `<slug>`) as **Iteration N** in the
-> git worktree `<WT>` on branch `feat/iteration-N-<slug>`. Work only inside
+> You are implementing bored card #C (board `<slug>`) in **Iteration X.Y** in
+> the git worktree `<WT>` on branch `feat/X.Y-C-<slug>`. Work only inside
 > that worktree. Read `<WT>/AGENTS.md` and `~/.claude/CLAUDE.md` first, then
 > `~/.claude/skills/autonomous-run/SKILL.md` §3–§4 — that is your procedure.
-> Set the workspace version to `<0.N.0 | 1.N.0>` (start-iteration step 7).
+> `<Set the workspace version to X.Y.0 | Leave the workspace version as it is>`
+> (start-iteration step 7; the orchestrator decides which).
 > Implement the card's acceptance criteria with tests, run the repo's local
 > checks, commit, push, and open the PR with `gh pr create`. **Do not** review
 > your own PR, spawn subagents, merge, or move the card — the orchestrator

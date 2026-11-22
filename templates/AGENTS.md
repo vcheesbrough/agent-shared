@@ -21,7 +21,8 @@ Cross-repo rules change in `agent-shared`, not here.
 | **Remote / `gh` repo** | `<owner>/<repo>` |
 | **Trunk** | `<main|master>` |
 | **Kanban board** | `https://bored.desync.link/boards/<slug>` |
-| **Phase** | `<pre-MVP 0.N.P | post-MVP 1.N.P>` |
+| **Phase** | `<pre-MVP 0.x | post-MVP 1.x or later>` |
+| **Production version** | `<how to read the version production runs, e.g. its version endpoint>` |
 
 Shared skills apply here once the machine is wired up (`start-iteration`,
 `ci-watch`, `pr-review-loop`). Their per-repo parameters:

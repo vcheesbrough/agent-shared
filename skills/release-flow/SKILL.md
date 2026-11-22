@@ -66,9 +66,11 @@ The version travels between steps in `.release-tag`; every step reads
   the commit (`git tag --points-at <sha>` after a fetch). Built:
   `git ls-remote origin 'refs/builds/*'` — the `^{}` line under each ref is the
   commit. A commit with a build ref but no tag was built, never deployed.
-- **Starting an iteration.** `start-iteration` sets the manifest to `0.N.0` /
-  `1.N.0`. Builds on that branch claim `0.N.x` while trunk keeps building its
-  own line; both counters are independent.
+- **Starting an iteration.** An iteration is the release line `X.Y` it ships
+  in (baseline §2). `start-iteration` sets the manifest to `X.Y.0` only when a
+  card opens the next line, after production runs trunk's; a card joining an
+  unreleased line leaves it alone. Branch and trunk builds on one line share
+  its patch counter.
 - **`1.0.0`.** Set the manifest to `1.0.0` on the MVP-completion card; the
   first build after it claims `1.0.0` and its first deploy writes the tag.
   Never tag it by hand.
