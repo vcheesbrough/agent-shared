@@ -1,0 +1,27 @@
+# code-vitals: record this repo's trunk commits (vcheesbrough/code-vitals,
+# README § Measuring a repo).
+#
+# Not CI: it runs on `main` pushes only, gates nothing, and the step cannot
+# fail the pipeline (`failure: ignore`). code-vitals deployments read the
+# settings below from this file at the trunk head and re-measure the repo.
+# The file must be named code-vitals.yml.
+when:
+  - event: [push, manual]
+    branch: main
+skip_clone: true  # the collector clones this public repo itself, with full history
+steps:
+  code-vitals:
+    # Moving tag: code-vitals AGENTS.md § Deviations register. `pull: true`
+    # fetches whatever :stable now names (the last checked prod build).
+    image: registry.desync.link/code-vitals-plugin:stable
+    pull: true
+    failure: ignore
+    # Needs the Woodpecker repo to trust volumes; without that the workflow is
+    # rejected before the step runs, which `failure: ignore` does not cover.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    settings:
+      trunk: main
+      # No version_sources: this repo has no Cargo/pyproject/plain version file.
+      writer_password:
+        from_secret: code_vitals_prod_writer_password

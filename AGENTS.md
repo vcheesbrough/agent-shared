@@ -23,7 +23,7 @@ If you change an agent-shared rule, change it here — there is no parallel copy
 | --- | --- |
 | **Remote / `gh` repo** | `vcheesbrough/agent-shared` |
 | **Trunk** | `main` |
-| **CI** | none — no Woodpecker or GitHub Actions config in this repo |
+| **CI** | none — the only Woodpecker workflow is `.woodpecker/code-vitals.yml`, which records trunk commits in code-vitals; it gates nothing |
 | **Kanban board** | none — work here is not tracked on a bored board |
 
 Contents: `global/AGENTS.md` (the cross-repo baseline), `skills/` and `agents/`
