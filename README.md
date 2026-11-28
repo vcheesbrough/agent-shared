@@ -90,6 +90,17 @@ work. The subagent reads them, returns ~20 lines of diagnosis, and the logs die
 with it. It runs on Sonnet — log triage does not need the main thread's model,
 and per-agent `model:` frontmatter is the cheapest lever in the whole setup.
 
+**A model per card.** `card-worker` is the worker `autonomous-run` spawns,
+one per card, in that card's worktree. Its frontmatter says Opus, but the
+orchestrator overrides it per card from a **tier** it assigns when planning
+the run: Sonnet for light cards (docs, config, no production logic), Opus for
+standard code changes, Fable for the rare complex card. A card escalates one
+tier if its worker struggles. A `**Model:** <sonnet|opus|fable>` line in a
+card's body pins its worker's model instead, with no tiering and no
+escalation. The orchestrating session never writes card
+code, so it can run on Sonnet. Every model that matters is pinned per agent
+rather than inherited from the session.
+
 Not everything is worth delegating. `start-iteration` is a handful of MCP calls
 returning small payloads; spawning a subagent costs more than it saves. Nor can
 the §5 Part B triage loop be delegated in an attended run — it needs a user
